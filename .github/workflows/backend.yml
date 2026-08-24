@@ -1,4 +1,4 @@
-name: Backend Sanity
+name: Backend CI
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   backend-checks:
-    name: Lint and Test Backend
+    name: Sanity Checks for Backend
     runs-on: ubuntu-latest
 
     defaults:
