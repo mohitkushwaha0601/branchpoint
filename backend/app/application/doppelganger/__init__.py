@@ -1,0 +1,1 @@
+"""Adversarial DOPPELGÄNGER workflow package."""

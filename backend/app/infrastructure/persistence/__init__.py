@@ -1,0 +1,1 @@
+"""Future persistence adapter package."""
