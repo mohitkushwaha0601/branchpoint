@@ -12,6 +12,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy only application code required at runtime.
+COPY README.md ./
 COPY app ./app
 
 # Install the project into the environment after source is present.

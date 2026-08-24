@@ -26,4 +26,3 @@ htmlcov/
 
 # Do not send tests/docs to production build context
 tests/
-README.md
