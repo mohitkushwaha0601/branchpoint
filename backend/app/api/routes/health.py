@@ -13,12 +13,12 @@ router = APIRouter(tags=["health"])
 class HealthResponse(BaseModel):
     """Deterministic service health response."""
 
-    status: Literal["ok"]
-    service: Literal["branchpoint-backend"]
-    version: str
+    status: Literal["ok"] = "ok"
+    service: str = SERVICE_NAME
+    version: str = APP_VERSION
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Report whether the API process is available."""
-    return HealthResponse(status="ok", service=SERVICE_NAME, version=APP_VERSION)
+    return HealthResponse()

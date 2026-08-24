@@ -11,6 +11,14 @@ dependencies = [
     "uvicorn>=0.34,<1",
 ]
 
+[build-system]
+requires = ["uv_build>=0.11.2,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+module-name = "app"
+
 [dependency-groups]
 dev = [
     "httpx>=0.28,<1",

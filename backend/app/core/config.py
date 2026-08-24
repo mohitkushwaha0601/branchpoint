@@ -1,13 +1,19 @@
 """Environment-backed application configuration."""
 
 from functools import lru_cache
+from importlib.metadata import PackageNotFoundError, version
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_NAME = "BRANCHPOINT"
-APP_VERSION = "0.1.0"
 SERVICE_NAME = "branchpoint-backend"
+
+try:
+    APP_VERSION = version(SERVICE_NAME)
+except PackageNotFoundError:
+    # The checkout is not installed into the environment; run `uv sync` from backend/.
+    APP_VERSION = "0.0.0"
 
 
 class Settings(BaseSettings):

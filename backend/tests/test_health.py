@@ -1,8 +1,11 @@
 """Health endpoint contract tests."""
 
+from importlib.metadata import version
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import APP_VERSION, SERVICE_NAME
 from app.main import app
 
 
@@ -17,5 +20,9 @@ async def test_health() -> None:
     assert response.json() == {
         "status": "ok",
         "service": "branchpoint-backend",
-        "version": "0.1.0",
+        "version": APP_VERSION,
     }
+
+
+def test_app_version_is_read_from_installed_package_metadata() -> None:
+    assert APP_VERSION == version(SERVICE_NAME)
