@@ -1,0 +1,1 @@
+"""Commit receipt domain package."""
