@@ -1,0 +1,29 @@
+# VCS
+.git
+.gitignore
+
+# Python cache and virtual envs
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+
+# Test and tooling artifacts
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local env and editor files
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.DS_Store
+
+# Do not send tests/docs to production build context
+tests/
+README.md

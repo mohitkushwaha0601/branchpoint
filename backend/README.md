@@ -30,6 +30,26 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+## Docker deployment
+
+Build the image from the `backend` directory:
+
+```bash
+docker build -t branchpoint-backend:latest .
+```
+
+Run the container:
+
+```bash
+docker run --rm -p 8000:8000 --name branchpoint-backend branchpoint-backend:latest
+```
+
+Health check endpoint:
+
+```text
+http://localhost:8000/health
+```
+
 ## Architecture
 
 - `api/` exposes the HTTP interface and delegates application work.
