@@ -19,6 +19,7 @@ from tests.factories import FIXED_TIME, make_action, make_incident
 from tests.mcp.conftest import MCPTestHarness, mcp_session
 
 READ_TOOL_NAMES = {
+    # reality inspection (Phase 2)
     "branchpoint_get_incident",
     "branchpoint_get_metrics",
     "branchpoint_get_deployment",
@@ -26,12 +27,25 @@ READ_TOOL_NAMES = {
     "branchpoint_get_schema",
     "branchpoint_get_orders_summary",
     "branchpoint_get_reality_state",
+    # counterfactual world inspection + replay (Phase 3)
+    "branchpoint_get_world",
+    "branchpoint_get_world_action",
+    "branchpoint_get_world_metrics",
+    "branchpoint_get_world_orders_summary",
+    "branchpoint_get_compatibility_context",
+    "branchpoint_reproduce_counterexample",
 }
 DESTRUCTIVE_TOOL_NAMES = {
     "branchpoint_disable_feature_flag",
     "branchpoint_set_deployment_version",
     "branchpoint_scale_service",
+    "branchpoint_commit_recommended_world",
 }
+
+#: The only destructive tool permitted to accept a world id. It does not mutate
+#: the world — it commits that world's already-approved action to reality
+#: through every Phase 1 gate.
+SANCTIONED_WORLD_COMMIT_TOOL = "branchpoint_commit_recommended_world"
 
 
 async def _issue_capability_for_flag_disable(harness: MCPTestHarness):
@@ -81,6 +95,9 @@ async def test_tools_list_succeeds(mcp_harness: MCPTestHarness) -> None:
     assert READ_TOOL_NAMES <= names
     assert DESTRUCTIVE_TOOL_NAMES <= names
     assert len(result.tools) == len(READ_TOOL_NAMES) + len(DESTRUCTIVE_TOOL_NAMES)
+    # The canonical inventory is 17 tools. Role-specific agent tool sets narrow
+    # what an agent sees; they never narrow what the server exposes.
+    assert len(result.tools) == 17
 
 
 async def test_every_tool_has_explicit_annotations(mcp_harness: MCPTestHarness) -> None:
@@ -224,10 +241,43 @@ async def test_malformed_tool_input_rejects_unenumerated_version(
 
 
 async def test_no_tool_exposes_raw_world_mutation(mcp_harness: MCPTestHarness) -> None:
+    """Counterfactual world state is never mutable over MCP.
+
+    Phase 3 added read-only world-inspection tools, so the old "no tool may
+    mention a world" rule no longer expresses the real invariant. What must
+    stay true is narrower and stronger: every tool that touches a world is
+    read-only, with exactly one sanctioned exception — the commit tool, which
+    mutates *reality* (never the world) and only through the full approval,
+    capability, and verification path.
+    """
     async with mcp_session(mcp_harness) as session:
         result = await session.list_tools()
 
-    for tool in result.tools:
-        assert "world" not in tool.name
-        properties = tool.input_schema.get("properties", {})
-        assert "world_id" not in properties
+    world_tools = [
+        tool
+        for tool in result.tools
+        if "world" in tool.name or "world_id" in tool.input_schema.get("properties", {})
+    ]
+    assert world_tools, "expected Phase 3 world-inspection tools to exist"
+
+    for tool in world_tools:
+        if tool.name == SANCTIONED_WORLD_COMMIT_TOOL:
+            assert tool.annotations.destructive_hint is True
+            continue
+        assert tool.annotations.read_only_hint is True, f"{tool.name} must be read-only"
+        assert tool.annotations.destructive_hint is False
+
+
+async def test_only_one_destructive_tool_accepts_a_world_id(mcp_harness: MCPTestHarness) -> None:
+    """No agent-reachable path can mutate an arbitrary world."""
+    async with mcp_session(mcp_harness) as session:
+        result = await session.list_tools()
+
+    destructive_with_world = {
+        tool.name
+        for tool in result.tools
+        if tool.annotations.destructive_hint
+        and "world_id" in tool.input_schema.get("properties", {})
+    }
+
+    assert destructive_with_world == {SANCTIONED_WORLD_COMMIT_TOOL}

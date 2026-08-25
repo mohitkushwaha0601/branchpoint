@@ -19,6 +19,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from app.application.orchestration.approval import ApprovalCoordinator
 from app.application.orchestration.orchestrator import BranchpointOrchestrator
 from app.infrastructure.demo.adapters import (
     DemoRealityMutator,
@@ -29,6 +30,11 @@ from app.infrastructure.demo.adapters import (
 from app.infrastructure.demo.dependencies import get_capability_store, get_demo_engine
 from app.infrastructure.demo.hero import HeroAdversarialTester, HeroCandidatePlanner
 from app.infrastructure.persistence.memory import InMemoryEventSink, InMemoryRunRepository
+from app.infrastructure.trueforge.adversary import TrueForgeAdversarialTester
+from app.infrastructure.trueforge.client import TrueForgeClient
+from app.infrastructure.trueforge.commit_operator import TrueForgeCommitOperator
+from app.infrastructure.trueforge.planner import PLANNER_TOOLS, TrueForgeCandidatePlanner
+from app.infrastructure.trueforge.sessions import InMemorySessionBindingStore
 
 
 @lru_cache
@@ -78,3 +84,97 @@ RunRepositoryDep = Annotated[InMemoryRunRepository, Depends(get_run_repository)]
 EventSinkDep = Annotated[InMemoryEventSink, Depends(get_event_sink)]
 OrchestratorDep = Annotated[BranchpointOrchestrator, Depends(get_orchestrator)]
 DemoOrchestratorDep = Annotated[BranchpointOrchestrator, Depends(get_demo_orchestrator)]
+
+
+@lru_cache
+def get_session_binding_store() -> InMemorySessionBindingStore:
+    """Return the process-wide TrueForge session binding store."""
+    return InMemorySessionBindingStore()
+
+
+@lru_cache
+def get_trueforge_client() -> TrueForgeClient:
+    """Return the process-wide TrueForge HTTP client."""
+    from app.core.config import get_settings
+
+    return TrueForgeClient(base_url=get_settings().trueforge_base_url)
+
+
+def build_agent_orchestrator() -> BranchpointOrchestrator:
+    """Build an orchestrator wired with the **real** TrueForge planner and adversary.
+
+    This is the Phase 3 path. It shares the demo engine, capability store, run
+    repository, and event sink with every other surface, and differs from the
+    Phase 2 demo orchestrator only in that planning and adversarial testing are
+    performed by TrueForge agents rather than deterministic demo fixtures.
+    """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    # Resolved once, here, and handed to both agents: the planner and every
+    # DOPPELGÄNGER in a run always speak to the same model. Neither adapter
+    # reads the environment itself.
+    model = settings.resolve_model()
+    engine = get_demo_engine()
+    capability_store = get_capability_store()
+    client = get_trueforge_client()
+    bindings = get_session_binding_store()
+
+    return BranchpointOrchestrator(
+        repository=get_run_repository(),
+        events=get_event_sink(),
+        reality_reader=DemoRealityReader(engine),
+        planner=TrueForgeCandidatePlanner(
+            client,
+            model=model,
+            bindings=bindings,
+            mcp_server_name=settings.trueforge_mcp_server_name,
+            read_only_tools=PLANNER_TOOLS,
+        ),
+        world_executor=DemoWorldExecutor(engine),
+        adversarial_tester=TrueForgeAdversarialTester(
+            client,
+            engine,
+            model=model,
+            bindings=bindings,
+            mcp_server_name=settings.trueforge_mcp_server_name,
+            sandbox_enabled=settings.trueforge_sandbox_enabled,
+        ),
+        mutator=DemoRealityMutator(engine, capability_store),
+        verifier=DemoRealityVerifier(engine),
+    )
+
+
+def build_commit_operator() -> TrueForgeCommitOperator:
+    """Build the TrueForge agent that carries out one approved commit."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    return TrueForgeCommitOperator(
+        get_trueforge_client(),
+        model=settings.resolve_model(),
+        bindings=get_session_binding_store(),
+        mcp_server_name=settings.trueforge_mcp_server_name,
+    )
+
+
+def build_approval_coordinator() -> ApprovalCoordinator:
+    """Build the coordinator behind ``POST /api/v1/runs/{run_id}/approval``.
+
+    Deliberately wired to the *demo* orchestrator, not the agent one: recording
+    the human decision and running the Phase 1 mutate/verify steps needs the
+    reality adapters, not a planner or an adversary. Both orchestrators share
+    the process-wide run repository and event sink, so this observes and
+    advances exactly the run ``POST /api/v1/agent-runs`` created.
+    """
+    repository = get_run_repository()
+    events = get_event_sink()
+    return ApprovalCoordinator(
+        orchestrator=get_demo_orchestrator(repository, events),
+        repository=repository,
+        events=events,
+        commit_operator=build_commit_operator(),
+    )
+
+
+SessionBindingStoreDep = Annotated[InMemorySessionBindingStore, Depends(get_session_binding_store)]

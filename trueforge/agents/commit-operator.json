@@ -1,0 +1,27 @@
+{
+  "_comment": "AgentSpec for the operator agent that proposes the final destructive commit. `require_approval_for_tools` names the commit tool LITERALLY as well as using the @destructive selector: the literal name is the belt-and-braces guard that does not depend on annotation classification. Verified on TrueForge 0.1.4: branchpoint_commit_recommended_world is classified destructive from its MCP annotations, so either mechanism alone would pause it.",
+  "model": { "name": "REPLACE_WITH_PROVIDER/MODEL", "params": { "temperature": 0 } },
+  "mcp_servers": [
+    {
+      "name": "branchpoint",
+      "enable_tools": [
+        "branchpoint_get_reality_state",
+        "branchpoint_get_world",
+        "branchpoint_commit_recommended_world"
+      ],
+      "require_approval_for_tools": [
+        "@write",
+        "@destructive",
+        "branchpoint_commit_recommended_world",
+        "branchpoint_disable_feature_flag",
+        "branchpoint_set_deployment_version",
+        "branchpoint_scale_service"
+      ]
+    }
+  ],
+  "config": {
+    "sandbox": { "enabled": false },
+    "dynamic_sub_agents": { "enabled": false },
+    "iteration_limit": 20
+  }
+}

@@ -1,0 +1,399 @@
+"""Phase 3 agent-run endpoints.
+
+``POST /api/v1/agent-runs`` starts a TrueForge-backed BRANCHPOINT run and
+drives it to the human approval gate. It never commits.
+
+``POST /api/v1/runs/{run_id}/approval`` is where a human says yes. That one
+endpoint is the *only* place a commit can be authorized, and it carries no
+action content: the caller cannot name an action, only confirm the one
+BRANCHPOINT already recommended and bound. Approving there drives the commit
+through the sanctioned destructive path — the
+``branchpoint_commit_recommended_world`` MCP tool, invoked by a TrueForge
+commit operator whose tool call BRANCHPOINT resumes on behalf of the approval
+it already holds — and then through independent verification.
+"""
+
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
+
+from app.api.dependencies import (
+    EventSinkDep,
+    RunRepositoryDep,
+    SessionBindingStoreDep,
+    build_agent_orchestrator,
+    build_approval_coordinator,
+)
+from app.application.errors import RunNotFoundError
+from app.application.orchestration.agent_run import AgentRunService
+from app.application.orchestration.approval import (
+    ApprovalMismatchError,
+    ApprovalNotAvailableError,
+    CommitFailedError,
+)
+from app.core.config import ModelNotConfiguredError, Settings, get_settings
+from app.domain.comparison.models import ComparisonResult
+from app.domain.incidents.models import Incident, IncidentSeverity
+from app.domain.primitives import new_id, utc_now
+from app.domain.runs.lifecycle import RunStatus
+from app.domain.worlds.models import World
+from app.infrastructure.trueforge.errors import TrueForgeError
+
+router = APIRouter(prefix="/api/v1", tags=["agent-runs"])
+
+
+class StartAgentRunRequest(BaseModel):
+    """Body of ``POST /api/v1/agent-runs``."""
+
+    objective: str = Field(min_length=1, max_length=500)
+    title: str = "Production incident"
+    severity: IncidentSeverity = IncidentSeverity.CRITICAL
+    affected_services: tuple[str, ...] = ()
+
+    def to_incident(self) -> Incident:
+        """Convert the request into a domain incident."""
+        return Incident(
+            incident_id=new_id("incident"),
+            title=self.title,
+            goal=self.objective,
+            severity=self.severity,
+            detected_at=utc_now(),
+            affected_services=self.affected_services,
+        )
+
+
+class ApproveRunRequest(BaseModel):
+    """Body of ``POST /api/v1/runs/{run_id}/approval``.
+
+    Carries **no action content**. ``expected_*`` are optional confirmations of
+    what the human believes they are approving; a value that disagrees with the
+    bound approval is a conflict, never an instruction to commit something else.
+    """
+
+    actor: str = Field(min_length=1, max_length=200)
+    expected_world_id: str | None = None
+    expected_action_id: str | None = None
+    expected_action_fingerprint: str | None = None
+
+
+class ApprovalDecisionResponse(BaseModel):
+    """What the frontend needs after submitting a human approval."""
+
+    run_id: str
+    world_id: str
+    action_id: str
+    action_name: str
+    approval_status: str
+    run_status: RunStatus
+    commit_status: str | None
+    verification_status: str | None
+    detail: str
+
+
+class SessionBindingResponse(BaseModel):
+    """One BRANCHPOINT id bound to one TrueForge session."""
+
+    purpose: str
+    trueforge_session_id: str
+    world_id: str | None
+    status: str
+    last_turn_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentRunResponse(BaseModel):
+    """Status of a Phase 3 agent run."""
+
+    run_id: str
+    status: RunStatus
+    recommended_world_id: str | None
+    awaiting_approval: bool
+    sessions: tuple[SessionBindingResponse, ...]
+    detail: str
+
+
+class WorldDetailResponse(BaseModel):
+    """One world with its measured outcome and evidence counts."""
+
+    world_id: str
+    status: str
+    verdict: str | None
+    verdict_reason: str
+    action_id: str
+    action_name: str
+    action_type: str
+    goal_achieved: bool | None
+    goal_attainment: float | None
+    regressions_detected: int | None
+    blast_radius: int | None
+    cost_delta: float | None
+    evidence_count: int
+    counterexample_count: int
+    reproduced_counterexamples: int
+
+    @classmethod
+    def from_domain(cls, world: World) -> "WorldDetailResponse":
+        """Build the response from a domain world."""
+        outcome = world.outcome
+        return cls(
+            world_id=world.world_id,
+            status=str(world.status),
+            verdict=str(world.verdict) if world.verdict else None,
+            verdict_reason=world.verdict_reason,
+            action_id=world.candidate_action.action_id,
+            action_name=world.candidate_action.name,
+            action_type=str(world.candidate_action.action_type),
+            goal_achieved=outcome.goal_achieved if outcome else None,
+            goal_attainment=outcome.goal_attainment if outcome else None,
+            regressions_detected=outcome.regressions_detected if outcome else None,
+            blast_radius=outcome.blast_radius if outcome else None,
+            cost_delta=outcome.cost_delta if outcome else None,
+            evidence_count=len(world.evidence),
+            counterexample_count=len(world.counterexamples),
+            reproduced_counterexamples=sum(
+                1 for cx in world.counterexamples if str(cx.status) == "REPRODUCED"
+            ),
+        )
+
+
+class WorldsResponse(BaseModel):
+    """Every world in a run."""
+
+    run_id: str
+    worlds: tuple[WorldDetailResponse, ...]
+
+
+class RankingResponse(BaseModel):
+    """One world's place in the deterministic ordering."""
+
+    world_id: str
+    rank: int
+    goal_achieved: bool
+    goal_attainment: float
+    regressions_detected: int
+    blast_radius: int
+    cost_delta: float
+
+
+class RejectedWorldDetail(BaseModel):
+    """A world disqualified by comparison, and why."""
+
+    world_id: str
+    reasons: tuple[str, ...]
+    detail: str
+
+
+class ComparisonDetailResponse(BaseModel):
+    """The deterministic comparison for a run."""
+
+    run_id: str
+    recommended_world_id: str | None
+    eligible_world_ids: tuple[str, ...]
+    tied_world_ids: tuple[str, ...]
+    rankings: tuple[RankingResponse, ...]
+    rejected_worlds: tuple[RejectedWorldDetail, ...]
+    summary: str
+
+    @classmethod
+    def from_domain(cls, run_id: str, comparison: ComparisonResult) -> "ComparisonDetailResponse":
+        """Build the response from a domain comparison result."""
+        return cls(
+            run_id=run_id,
+            recommended_world_id=comparison.recommended_world_id,
+            eligible_world_ids=comparison.eligible_world_ids,
+            tied_world_ids=comparison.tied_world_ids,
+            rankings=tuple(
+                RankingResponse(
+                    world_id=r.world_id,
+                    rank=r.rank,
+                    goal_achieved=r.goal_achieved,
+                    goal_attainment=r.goal_attainment,
+                    regressions_detected=r.regressions_detected,
+                    blast_radius=r.blast_radius,
+                    cost_delta=r.cost_delta,
+                )
+                for r in comparison.rankings
+            ),
+            rejected_worlds=tuple(
+                RejectedWorldDetail(
+                    world_id=rejected.world_id,
+                    reasons=tuple(str(reason) for reason in rejected.reasons),
+                    detail=rejected.detail,
+                )
+                for rejected in comparison.rejected_worlds
+            ),
+            summary=comparison.summary,
+        )
+
+
+@router.post("/agent-runs", response_model=AgentRunResponse)
+async def start_agent_run(
+    body: StartAgentRunRequest,
+    repository: RunRepositoryDep,
+    events: EventSinkDep,
+    bindings: SessionBindingStoreDep,
+) -> AgentRunResponse:
+    """Start a TrueForge-backed run and drive it to the approval gate.
+
+    Returns once the run is awaiting human approval (or has been rejected).
+    Nothing in reality has changed.
+    """
+    settings: Settings = get_settings()
+    try:
+        # Called for its check: a run must not start half-configured. The same
+        # resolution runs again inside ``build_agent_orchestrator``.
+        settings.resolve_model()
+    except ModelNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    service = AgentRunService(
+        orchestrator=build_agent_orchestrator(), events=events, bindings=bindings
+    )
+    try:
+        run = await service.drive_to_approval(body.to_incident())
+    except TrueForgeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"TrueForge failure: {exc}"
+        ) from exc
+
+    return await _agent_run_response(run.run_id, repository, bindings)
+
+
+@router.get("/agent-runs/{run_id}", response_model=AgentRunResponse)
+async def get_agent_run(
+    run_id: str, repository: RunRepositoryDep, bindings: SessionBindingStoreDep
+) -> AgentRunResponse:
+    """Return a run's status together with its TrueForge session bindings."""
+    return await _agent_run_response(run_id, repository, bindings)
+
+
+@router.post("/runs/{run_id}/approval", response_model=ApprovalDecisionResponse)
+async def approve_run(run_id: str, body: ApproveRunRequest) -> ApprovalDecisionResponse:
+    """Record explicit human approval of the recommended world, and commit it.
+
+    This is a decision, not a mutation request: the body carries no action, no
+    parameters, and no target. BRANCHPOINT commits exactly the action it already
+    bound to this run's approval, through the destructive MCP tool, and then
+    verifies reality independently. Re-submitting is idempotent — a run a human
+    already approved is returned as-is rather than committed twice.
+    """
+    settings: Settings = get_settings()
+    try:
+        settings.resolve_model()
+    except ModelNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    coordinator = build_approval_coordinator()
+    try:
+        run = await coordinator.approve(
+            run_id,
+            actor=body.actor,
+            expected_world_id=body.expected_world_id,
+            expected_action_id=body.expected_action_id,
+            expected_action_fingerprint=body.expected_action_fingerprint,
+        )
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ApprovalNotAvailableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ApprovalMismatchError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except CommitFailedError as exc:
+        # The run itself carries what happened; this is not a client error.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        ) from exc
+    except TrueForgeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"TrueForge failure: {exc}"
+        ) from exc
+
+    return _approval_response(run)
+
+
+def _approval_response(run) -> ApprovalDecisionResponse:
+    """Render the post-approval state a frontend needs."""
+    approval = run.approval
+    assert approval is not None  # an approved run always carries its approval
+    world = run.require_world(approval.selected_world_id)
+    return ApprovalDecisionResponse(
+        run_id=run.run_id,
+        world_id=approval.selected_world_id,
+        action_id=approval.action_id,
+        action_name=world.candidate_action.name,
+        approval_status=str(approval.status),
+        run_status=run.status,
+        commit_status=str(run.commit_receipt.status) if run.commit_receipt else None,
+        verification_status=str(run.verification.status) if run.verification else None,
+        detail=(
+            f"{world.candidate_action.name} committed and independently verified"
+            if run.status is RunStatus.SUCCEEDED
+            else f"run is {run.status}: {run.failure_reason or 'see run detail'}"
+        ),
+    )
+
+
+@router.get("/runs/{run_id}/worlds", response_model=WorldsResponse)
+async def get_run_worlds(run_id: str, repository: RunRepositoryDep) -> WorldsResponse:
+    """Return every counterfactual world in a run with its measured outcome."""
+    run = await repository.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"run {run_id} not found")
+    return WorldsResponse(
+        run_id=run_id,
+        worlds=tuple(WorldDetailResponse.from_domain(world) for world in run.worlds),
+    )
+
+
+@router.get("/runs/{run_id}/comparison", response_model=ComparisonDetailResponse)
+async def get_run_comparison(run_id: str, repository: RunRepositoryDep) -> ComparisonDetailResponse:
+    """Return the deterministic comparison for a run."""
+    run = await repository.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"run {run_id} not found")
+    if run.comparison is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"run {run_id} has not been compared yet (status {run.status})",
+        )
+    return ComparisonDetailResponse.from_domain(run_id, run.comparison)
+
+
+async def _agent_run_response(
+    run_id: str, repository: RunRepositoryDep, bindings: SessionBindingStoreDep
+) -> AgentRunResponse:
+    run = await repository.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"run {run_id} not found")
+
+    recommended = run.comparison.recommended_world_id if run.comparison else None
+    awaiting = run.status is RunStatus.AWAITING_APPROVAL
+    return AgentRunResponse(
+        run_id=run.run_id,
+        status=run.status,
+        recommended_world_id=recommended,
+        awaiting_approval=awaiting,
+        sessions=tuple(
+            SessionBindingResponse(
+                purpose=str(b.purpose),
+                trueforge_session_id=b.trueforge_session_id,
+                world_id=b.world_id,
+                status=str(b.status),
+                last_turn_id=b.last_turn_id,
+                created_at=b.created_at,
+                updated_at=b.updated_at,
+            )
+            for b in await bindings.list_for_run(run_id)
+        ),
+        detail=(
+            "awaiting human approval in TrueForge; nothing in reality has changed"
+            if awaiting
+            else f"run is {run.status}"
+        ),
+    )

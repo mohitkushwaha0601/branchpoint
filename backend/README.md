@@ -135,7 +135,7 @@ uv run uvicorn app.main:app --reload
 
 DNS-rebinding Host/Origin validation is **on** by default, restricted to `localhost`/`127.0.0.1`/`[::1]` (with and without a port). This is the backstop for "only reachable from localhost" — it rejects requests whose Host/Origin doesn't claim to be local, independent of which interface the process is actually bound to. It is not the authorization boundary for mutations (the one-time commit capability is — see **Security model** below), but read tools have no capability gate, so this is what stands between them and the network. Set `BRANCHPOINT_MCP_INSECURE_LOCALHOST=true` to disable it (an explicit opt-in only; never do this on a non-loopback bind).
 
-**Tools** (10 total, every one carries explicit `readOnlyHint`/`destructiveHint` annotations — `tests/mcp/test_mcp_server.py` asserts none ships without them):
+**Tools** (17 total, every one carries explicit `readOnlyHint`/`destructiveHint` annotations — `tests/mcp/test_mcp_server.py` asserts none ships without them):
 
 | Read (`readOnlyHint=true`, `destructiveHint=false`) | Destructive (`readOnlyHint=false`, `destructiveHint=true`) |
 | --- | --- |
@@ -145,9 +145,95 @@ DNS-rebinding Host/Origin validation is **on** by default, restricted to `localh
 | `branchpoint_get_feature_flags` | |
 | `branchpoint_get_schema` | |
 | `branchpoint_get_orders_summary` (aggregate counts only — never raw order records) | |
-| `branchpoint_get_reality_state` | |
+| `branchpoint_get_reality_state` | `branchpoint_commit_recommended_world` |
+| `branchpoint_get_world` | |
+| `branchpoint_get_world_action` | |
+| `branchpoint_get_world_metrics` | |
+| `branchpoint_get_world_orders_summary` | |
+| `branchpoint_get_compatibility_context` | |
+| `branchpoint_reproduce_counterexample` | |
 
 Destructive tools take tightly typed parameters only (e.g. `version: Literal["v2.40", "v2.41"]`, `target_replicas: int` bounded `1–50`) — no arbitrary strings, object paths, or code. **Counterfactual worlds are never exposed for mutation over MCP**: no tool accepts a `world_id`, and no tool name contains "world". World execution belongs exclusively to `DemoWorldExecutor`, reached only through the BRANCHPOINT orchestrator.
+
+## Running with TrueForge (Phase 3)
+
+Phase 3 replaces the deterministic demo planner and attacker with **real TrueForge agents**. TrueForge is the agent harness; BRANCHPOINT remains the safety, evidence, and execution core. Full setup, agent specs, and the verified upstream version live in [`../trueforge/README.md`](../trueforge/README.md).
+
+```bash
+# 1. backend (serves /mcp)          2. TrueForge
+uv run uvicorn app.main:app --port 8000     npx @truefoundry/trueforge@0.1.4
+
+# 3. model provider (key lives in TrueForge, never here)
+# 4. register the MCP server + see how TrueForge classifies each tool
+../trueforge/scripts/setup_trueforge.sh
+# 5. sandbox (optional; TrueForge has a local fallback)
+# 6. start an agent run
+export BRANCHPOINT_MODEL="<provider>/<model-id>"   # one model for every agent
+curl -X POST localhost:8000/api/v1/agent-runs -H 'content-type: application/json' \
+  -d '{"objective":"Fix the checkout production incident."}'
+```
+
+Verify the wiring at any time — stages 1–4 need no model provider:
+
+```bash
+uv run python scripts/smoke_trueforge.py --checks-only
+```
+
+### MANYWORLDS with agents attached
+
+```
+USER → TrueForge planner ──(read-only MCP)──→ reality
+                │
+                ├─ proposes candidates → BRANCHPOINT validates them into CandidateActions
+                ▼
+        world α        world β        world γ        (isolated DemoProductionEngine snapshots)
+           │              │              │
+      TrueForge      TrueForge      TrueForge        world agents
+           │              │              │
+      DOPPELGÄNGER   DOPPELGÄNGER   DOPPELGÄNGER     real TrueForge subagents
+           │              │              │
+           └──────── TrueForge sandbox ──┘           exploratory only
+                          ▼
+              BRANCHPOINT replays CounterexampleSpec   ← the only authoritative step
+                          ▼
+              deterministic comparator (unchanged)
+                          ▼
+              human approval in TrueForge
+                          ▼
+              BRANCHPOINT commit gate → reality → independent verification
+```
+
+World execution and adversarial testing run **sequentially**, exactly as Phase 1 does. The `WorldExecutor`/`AdversarialTester` ports each take a single world, so this can be parallelised later without a contract change; it was left sequential deliberately rather than reworking orchestration that the test suite pins down.
+
+### What the planner may propose
+
+Only three action families, each with one typed parameter: `SET_DEPLOYMENT_VERSION` (`version`), `SET_FEATURE_FLAG` (`flag_key`), `SCALE_SERVICE` (`target_replicas`, bounded 1–50). Shell commands, URLs, database mutations, and arbitrary MCP calls encoded as actions are all rejected. Invalid output is fed back as validation feedback for at most **2** retries; a materially different action is never silently repaired.
+
+The planner is never told what the incident is. It has to read metrics, deployments, flags, schema, and orders for itself.
+
+### DOPPELGÄNGER and the counterexample contract
+
+Each world gets a TrueForge session that delegates the attack to a **real subagent** and gives it a sandbox. An opinion cannot veto anything. A veto requires a typed `CounterexampleSpec` that BRANCHPOINT replays itself:
+
+```
+counterexample_type   COMPATIBILITY | DATA_INTEGRITY | METRIC | INVARIANT
+operation             RETRY_PAYMENT | DESERIALIZE_ORDER | EXECUTE_CHECK | ASSERT_METRIC
+setup                 order selector (created_under_version / min_schema_version / order_id)
+assertion             CHECK_PASSES(check_name) | METRIC_AT_MOST/AT_LEAST(metric, threshold)
+expected, rationale   human-readable
+```
+
+`check_name` and `metric` are closed allowlists — there is no dynamic lookup, so arbitrary code cannot enter the replay engine. The assertion states the property that *should* hold; BRANCHPOINT reproduces the counterexample when the world violates it. Only then does Phase 1's existing veto rule fire.
+
+The adversary is never told about the rollback defect. Its vocabulary is generic (versions, schema versions), so it has to connect "this world runs an older deployment" to "these records need a newer schema" on its own.
+
+### Failure handling — fail closed
+
+TrueForge unavailable, a model timeout, an unparseable reply, a subagent or sandbox failure, a malformed spec, or an interrupted session all raise at the infrastructure boundary. The Phase 1 orchestrator turns that into an `INCONCLUSIVE` world. **No failure path can produce `SURVIVED`.**
+
+### Events
+
+The stream carries actions, tool usage, status, evidence, and outcomes — never model reasoning. TrueForge exposes `reasoning_content` on its `model.message` events; BRANCHPOINT's `TurnEvent` deliberately does not model that field, so chain-of-thought cannot reach the timeline.
 
 ## Demo reset
 
@@ -228,6 +314,10 @@ http://localhost:8000/health
 | `POST` | `/api/v1/runs/{run_id}/commit-capability` | Issue a one-time commit capability for an `APPROVED` run's selected world. Returns the raw token exactly once. |
 | `GET` | `/api/v1/demo/state` | Read-only current digital twin state and derived metrics. |
 | `POST` | `/api/v1/demo/reset` | Restore the exact initial incident. Unavailable in production. |
+| `POST` | `/api/v1/agent-runs` | Start a TrueForge-backed run and drive it to the human approval gate. Never commits. |
+| `GET` | `/api/v1/agent-runs/{run_id}` | Run status plus its TrueForge session bindings. |
+| `GET` | `/api/v1/runs/{run_id}/worlds` | Every counterfactual world with its measured outcome. |
+| `GET` | `/api/v1/runs/{run_id}/comparison` | The deterministic comparison and rankings. |
 | `POST` | `/mcp` | The MCP server, streamable HTTP transport. See **MCP** above. |
 
 OpenAPI is served at `/openapi.json`.
@@ -240,4 +330,6 @@ There is still no HTTP endpoint to decide an approval or drive a commit/verify: 
 
 **Phase 2** (this phase): the checkout Operational Digital Twin, its metrics and workload/regression engines, Phase 1 port adapters backed by it, the one-time commit capability security layer, the deterministic hero demo test adapters, and the MCP server. Still zero external network dependencies — everything runs in-process with in-memory state.
 
-**Deferred to Phase 3**: TrueForge agent orchestration (replacing `HeroCandidatePlanner`/`HeroAdversarialTester`), a real DOPPELGÄNGER, any LLM/model SDK, sandbox providers, real persistence, WebSockets, and the frontend.
+**Phase 3**: real TrueForge-backed planner and DOPPELGÄNGER (subagents + sandbox), the `CounterexampleSpec` replay engine, world-inspection and commit MCP tools, TrueForge session bindings, the human-approval commit path, and the extended event model. `HeroCandidatePlanner`/`HeroAdversarialTester` remain, but only as deterministic test fixtures — they are not the Phase 3 demo path.
+
+**Deferred**: parallel world/adversarial execution, real persistence (runs and bindings are still in-memory; TrueForge persists its own sessions), WebSocket streaming, and the frontend.
