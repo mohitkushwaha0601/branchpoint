@@ -122,6 +122,18 @@ def test_machine_verifiable_evidence_must_record_an_outcome() -> None:
         )
 
 
+@pytest.mark.parametrize("bad_cost_delta", [float("nan"), float("inf"), float("-inf")])
+def test_execution_outcome_rejects_non_finite_cost_delta(bad_cost_delta: float) -> None:
+    with pytest.raises(ValidationError):
+        make_outcome(cost_delta=bad_cost_delta)
+
+
+@pytest.mark.parametrize("bad_attainment", [float("nan"), float("inf"), float("-inf")])
+def test_execution_outcome_rejects_non_finite_goal_attainment(bad_attainment: float) -> None:
+    with pytest.raises(ValidationError):
+        make_outcome(goal_attainment=bad_attainment)
+
+
 def test_only_machine_verifiable_failures_disqualify() -> None:
     unverifiable = make_evidence("soft_1", passed=False, machine_verifiable=False)
     verifiable = make_evidence("hard_1", passed=False, machine_verifiable=True)

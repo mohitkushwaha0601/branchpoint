@@ -52,16 +52,19 @@ def _rejection_for(world: World) -> RejectedWorld | None:
     details: list[str] = []
 
     outcome = world.outcome
-    if world.verdict is None or outcome is None:
+    if world.verdict is None:
         return RejectedWorld(
             world_id=world.world_id,
             reasons=(RejectionReason.NOT_EVALUATED,),
-            detail="world has no execution outcome or verdict",
+            detail="world has no verdict",
         )
 
-    if world.verdict is WorldVerdict.EXECUTION_FAILED or not outcome.succeeded:
-        reasons.append(RejectionReason.EXECUTION_FAILED)
-        details.append("counterfactual execution failed")
+    if world.verdict is WorldVerdict.EXECUTION_FAILED or outcome is None or not outcome.succeeded:
+        return RejectedWorld(
+            world_id=world.world_id,
+            reasons=(RejectionReason.EXECUTION_FAILED,),
+            detail=world.verdict_reason or "counterfactual execution failed",
+        )
 
     vetoing = vetoing_counterexamples(world)
     if vetoing:

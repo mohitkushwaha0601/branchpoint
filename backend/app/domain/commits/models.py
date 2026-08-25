@@ -50,8 +50,13 @@ class CommitReceipt(DomainModel):
         evidence_ids: tuple[str, ...] = (),
         at: datetime | None = None,
     ) -> "CommitReceipt":
-        """Close the receipt; the commit succeeds only if every operation succeeded."""
-        succeeded = bool(operations) and all(operation.succeeded for operation in operations)
+        """Close the receipt; the commit succeeds only if every operation succeeded.
+
+        An empty ``operations`` tuple succeeds vacuously, so a legitimate no-op
+        commit (e.g. :attr:`~app.domain.actions.models.ActionType.NO_OP`, or any
+        action an adapter determines needs no work) can be represented.
+        """
+        succeeded = all(operation.succeeded for operation in operations)
         return evolve(
             self,
             operations=operations,

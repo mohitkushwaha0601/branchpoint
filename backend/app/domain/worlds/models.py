@@ -61,10 +61,10 @@ class ExecutionOutcome(DomainModel):
     goal_achieved: bool
     invariants_preserved: bool
     reversible: bool
-    goal_attainment: float = Field(ge=0.0, le=1.0)
+    goal_attainment: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
     regressions_detected: int = Field(default=0, ge=0)
     blast_radius: int = Field(default=0, ge=0)
-    cost_delta: float = 0.0
+    cost_delta: float = Field(default=0.0, allow_inf_nan=False)
     summary: str = ""
 
 

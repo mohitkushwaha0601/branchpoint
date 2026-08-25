@@ -3,7 +3,8 @@
 from app.application.world_engine.comparator import compare_worlds
 from app.domain.comparison.models import RejectionReason
 from app.domain.evidence.models import EvidenceKind, EvidenceSeverity
-from app.domain.worlds.models import CounterexampleStatus, World
+from app.domain.worlds.lifecycle import WorldStatus
+from app.domain.worlds.models import CounterexampleStatus, World, WorldVerdict
 from tests.factories import (
     FIXED_TIME,
     completed_world,
@@ -56,6 +57,21 @@ def survivor(world_id: str, **outcome_overrides: object) -> World:
     )
 
 
+def executor_crashed_world(world_id: str = "world_crashed") -> World:
+    """A world settled EXECUTION_FAILED with no outcome, matching what the
+    orchestrator produces when the executor port raises before any execution
+    result is recorded (see ``BranchpointOrchestrator.execute_worlds``)."""
+    world = World.create(
+        world_id=world_id,
+        run_id="run_1",
+        candidate_action=make_action(f"{world_id}_action"),
+        at=FIXED_TIME,
+    )
+    world = world.transition_to(WorldStatus.PREPARING, at=FIXED_TIME)
+    world = world.transition_to(WorldStatus.EXECUTING, at=FIXED_TIME)
+    return world.settle(WorldVerdict.EXECUTION_FAILED, "executor error: boom", at=FIXED_TIME)
+
+
 def test_vetoed_world_is_rejected_with_its_reason() -> None:
     result = compare_worlds([vetoed(), survivor("world_ok")])
 
@@ -71,6 +87,19 @@ def test_failed_world_is_rejected() -> None:
 
     rejected = {item.world_id: item for item in result.rejected_worlds}
     assert RejectionReason.EXECUTION_FAILED in rejected["world_failed"].reasons
+    assert result.recommended_world_id == "world_ok"
+
+
+def test_executor_crash_with_no_outcome_is_rejected_as_execution_failed() -> None:
+    """A crashed executor must not be misreported as NOT_EVALUATED: the world
+    does have a verdict, it just never produced an execution outcome."""
+    crashed = executor_crashed_world()
+
+    result = compare_worlds([crashed, survivor("world_ok")])
+
+    rejected = {item.world_id: item for item in result.rejected_worlds}
+    assert rejected["world_crashed"].reasons == (RejectionReason.EXECUTION_FAILED,)
+    assert "boom" in rejected["world_crashed"].detail
     assert result.recommended_world_id == "world_ok"
 
 
