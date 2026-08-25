@@ -74,7 +74,17 @@ class Settings(BaseSettings):
     trueforge_mcp_url: str = "http://127.0.0.1:8000/mcp"
     """URL TrueForge should reach this backend's MCP server on."""
     trueforge_sandbox_enabled: bool = True
-    """Whether DOPPELGÄNGER sessions get a TrueForge sandbox for exploration."""
+    """Whether DOPPELGÄNGER sessions get a TrueForge sandbox for exploration.
+
+    DOPPELGÄNGER only. The planner and the commit operator are hardwired to
+    ``sandbox.enabled = false`` and do not consult this setting: nothing that
+    reads reality or writes to it is ever given code execution.
+
+    Turning it on grants exploratory ``exec`` inside the sandbox and nothing
+    else — no extra tools, and no path to a veto. Sandbox output is recorded
+    with ``machine_verifiable=False``; only BRANCHPOINT's own replay can produce
+    the machine-verifiable failing evidence a veto requires.
+    """
 
     demo_scenario_path: str | None = None
     """Override path to the hero scenario fixture (``BRANCHPOINT_DEMO_SCENARIO_PATH``).

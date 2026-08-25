@@ -63,7 +63,7 @@ No model is ever authoritative for evidence validity, a world verdict, compariso
 `agents/*.json` are real `AgentSpec` bodies for `POST /api/v1/sessions` (`{"agent": {"spec": ...}}`). The backend builds these programmatically in `app/infrastructure/trueforge/{planner,adversary}.py`; the JSON files document the same shape for manual use in the TrueForge UI. Replace `REPLACE_WITH_PROVIDER/MODEL` with a model FQN from `GET /api/v1/models`.
 
 - **`planner.json`** — read-only reality tools, **no sandbox**, **no subagents**.
-- **`doppelganger.json`** — read-only *world* tools, **sandbox on**, **subagents on**.
+- **`doppelganger.json`** — read-only *world* tools, **subagents on**, and the only spec that may carry a **sandbox** (`config.sandbox.enabled`, driven by `BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED`).
 - **`commit-operator.json`** — the only spec that can reach a destructive tool, and it pauses for approval.
 
 ## Code Mode / destructive-tool classification
@@ -100,7 +100,11 @@ A turn pauses with `tool.approval_required`; only a client-supplied `user.tool_a
 
 ## Sandbox trust boundary
 
-The DOPPELGÄNGER may write and run whatever it likes in its TrueForge sandbox. That output is **exploratory evidence only** — BRANCHPOINT records it with `machine_verifiable=False`, so it can never contribute to a veto.
+`BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED` turns the sandbox on for **DOPPELGÄNGER sessions only**. The planner and the commit operator are hardwired to `sandbox.enabled: false` and never read the setting: nothing that reads reality or writes to it is given code execution. Enabling it grants TrueForge's built-in `exec` inside the sandbox and nothing else — the enabled MCP tool list is byte-for-byte identical either way, so no destructive tool becomes reachable.
+
+The DOPPELGÄNGER may write and run whatever it likes in its sandbox. That output is **exploratory evidence only** — BRANCHPOINT records it with `machine_verifiable=False`, so it can never contribute to a veto. The same is true of a subagent's summary and the model's own prose: sandbox `exec`, sandbox files, sandbox scripts, subagent prose, and model prose are all one provenance class, and none of them can mark a counterexample `REPRODUCED`.
+
+If the sandbox is unavailable, the adversary fails closed like any other TrueForge failure: an errored turn raises, the world goes `INCONCLUSIVE`, and a missing sandbox never reads as "this world was safely attacked".
 
 The only authoritative path is a typed `CounterexampleSpec` replayed by BRANCHPOINT against the world's own isolated snapshot. Every operation in that spec maps to a named, allowlisted demo primitive; there is no way to submit code. Sandbox-generated code never runs in the FastAPI process, and the sandbox cannot reach reality.
 

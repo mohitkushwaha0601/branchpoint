@@ -55,6 +55,36 @@ def sandbox_created_event(sandbox_id: str = "sbx_1") -> dict:
     }
 
 
+def sandbox_exec_event(
+    tool_call_id: str = "call_exec_1",
+    *,
+    command: str = "python3 /tmp/probe.py",
+    thread_id: str = "thread_doppel_1",
+    event_id: str = "evt_exec_1",
+) -> dict:
+    """Build a call to TrueForge's built-in sandbox ``exec`` tool.
+
+    Not an MCP tool: ``tool_info.type`` is TrueForge's own ``truefoundry-system``,
+    exactly as the sandbox capability appears on a live event stream. Pair it
+    with :func:`tool_response_event` on the same ``tool_call_id`` to script a
+    completed sandbox execution.
+    """
+    return {
+        "type": "model.message",
+        "id": event_id,
+        "created_at": "2026-08-25T12:00:02Z",
+        "thread_id": thread_id,
+        "content": "",
+        "tool_calls": [
+            {
+                "id": tool_call_id,
+                "function": {"name": "exec", "arguments": json.dumps({"command": command})},
+                "tool_info": {"type": "truefoundry-system", "name": "exec"},
+            }
+        ],
+    }
+
+
 def tool_response_event(tool_call_id: str, content: str, thread_id: str = "main") -> dict:
     """Build a ``tool.response`` event."""
     return {
