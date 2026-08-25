@@ -130,8 +130,13 @@ class FakeTurn:
 class FakeTrueForge:
     """Scripted TrueForge server backing a real ``TrueForgeClient``."""
 
-    def __init__(self, turns: list[FakeTurn] | None = None) -> None:
+    def __init__(
+        self, turns: list[FakeTurn] | None = None, *, models: list[dict] | None = None
+    ) -> None:
         self.turns = list(turns or [])
+        #: What ``GET /api/v1/models`` serves. An empty list is TrueForge with
+        #: no model provider configured, which several gates depend on.
+        self.models = [{"name": "fake/model"}] if models is None else list(models)
         self.created_sessions: list[dict[str, Any]] = []
         self.turn_requests: list[dict[str, Any]] = []
         self.requests: list[tuple[str, str]] = []
@@ -166,7 +171,7 @@ class FakeTrueForge:
             return httpx.Response(200, json={"data": {"sandbox": {"enabled": True}}})
 
         if path == "/api/v1/models":
-            return httpx.Response(200, json={"data": [{"name": "fake/model"}]})
+            return httpx.Response(200, json={"data": self.models})
 
         if path == "/api/v1/sessions" and request.method == "POST":
             body = json.loads(request.content)

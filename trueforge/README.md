@@ -100,7 +100,7 @@ A turn pauses with `tool.approval_required`; only a client-supplied `user.tool_a
 
 ## Sandbox trust boundary
 
-`BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED` turns the sandbox on for **DOPPELGÄNGER sessions only**. The planner and the commit operator are hardwired to `sandbox.enabled: false` and never read the setting: nothing that reads reality or writes to it is given code execution. Enabling it grants TrueForge's built-in `exec` inside the sandbox and nothing else — the enabled MCP tool list is byte-for-byte identical either way, so no destructive tool becomes reachable.
+`BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED` turns the sandbox on for **DOPPELGÄNGER sessions only**. It is off unless set, so code execution is something a deployment opts into rather than something it inherits. The planner and the commit operator are hardwired to `sandbox.enabled: false` and never read the setting: nothing that reads reality or writes to it is given code execution. Enabling it grants TrueForge's built-in `exec` inside the sandbox and nothing else — the enabled MCP tool list is byte-for-byte identical either way, so no destructive tool becomes reachable.
 
 The DOPPELGÄNGER may write and run whatever it likes in its sandbox. That output is **exploratory evidence only** — BRANCHPOINT records it with `machine_verifiable=False`, so it can never contribute to a veto. The same is true of a subagent's summary and the model's own prose: sandbox `exec`, sandbox files, sandbox scripts, subagent prose, and model prose are all one provenance class, and none of them can mark a counterexample `REPRODUCED`.
 

@@ -132,7 +132,7 @@ class TrueForgeAdversarialTester:
         model: str,
         bindings: InMemorySessionBindingStore,
         mcp_server_name: str = "branchpoint",
-        sandbox_enabled: bool = True,
+        sandbox_enabled: bool = False,
     ) -> None:
         self._client = client
         self._engine = engine

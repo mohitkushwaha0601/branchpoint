@@ -18,7 +18,9 @@ always resets demo reality on the way out.
 Stage 14 reports what TrueForge itself recorded about the DOPPELGÄNGER's
 sandbox. It is informational by default (the sandbox is opt-in) and becomes an
 assertion under ``--require-sandbox``, which is how the one live
-sandbox-enabled run is proven.
+sandbox-enabled run is proven. Because that proof needs the live hero flow,
+``--require-sandbox`` refuses to run alongside ``--checks-only`` and fails
+rather than skips when no model provider is configured.
 
 Nothing in the commit stages touches ``DemoProductionEngine`` directly. The
 approval goes through the real HTTP endpoint, which commits through the real
@@ -137,8 +139,15 @@ async def stage_tool_annotations(client: TrueForgeClient) -> bool:
     return ok
 
 
-async def stage_model_available(client: TrueForgeClient) -> bool:
-    """Gate for every model-dependent stage."""
+async def stage_model_available(client: TrueForgeClient, require_sandbox: bool = False) -> bool:
+    """Gate for every model-dependent stage.
+
+    Skipping the model-dependent stages is normal — most of this script is
+    useful without a provider. It is *not* normal under ``--require-sandbox``:
+    the sandbox assertion lives in stage 14, stage 14 needs the live hero flow,
+    and a run that quietly skipped the thing it was asked to prove must not
+    exit 0.
+    """
     try:
         models = await client.list_models()
     except Exception as exc:
@@ -148,8 +157,9 @@ async def stage_model_available(client: TrueForgeClient) -> bool:
     if not models:
         record(
             "5-14. model-dependent stages",
-            SKIP,
-            "no model provider configured in TrueForge; see trueforge/README.md",
+            FAIL if require_sandbox else SKIP,
+            "no model provider configured in TrueForge; see trueforge/README.md"
+            + (" — --require-sandbox cannot be proven without one" if require_sandbox else ""),
         )
         return False
     record("5. model provider configured", PASS, f"{len(models)} model(s)")
@@ -506,6 +516,15 @@ async def main() -> int:
         help="DEMO REALITY ONLY: approve and execute the destructive commit",
     )
     args = parser.parse_args()
+    if args.checks_only and args.require_sandbox:
+        # Stage 14 is the only place sandbox use is proven, and it needs the
+        # live hero flow. Honouring both flags would exit 0 having asserted
+        # nothing, which is exactly the outcome --require-sandbox exists to
+        # rule out.
+        parser.error(
+            "--require-sandbox proves sandbox use from a live run's TrueForge events, "
+            "so it cannot be combined with --checks-only"
+        )
 
     print("BRANCHPOINT × TrueForge smoke test\n")
     ok = True
@@ -519,7 +538,7 @@ async def main() -> int:
 
             if args.checks_only:
                 record("5-22. model-dependent stages", SKIP, "--checks-only")
-            elif await stage_model_available(client):
+            elif await stage_model_available(client, args.require_sandbox):
                 ok &= await stage_hero_flow(http, client, args.approve_commit, args.require_sandbox)
 
         finally:

@@ -93,12 +93,13 @@ def build_tester(fake: FakeTrueForge, engine: DemoProductionEngine, **kwargs):
 
 
 async def test_adversary_uses_a_real_subagent_and_sandbox() -> None:
+    """With the sandbox opted into — it is off unless configured on."""
     engine = DemoProductionEngine()
     world = await executed_world(engine, "world_alpha", ALPHA_ACTION)
     fake = FakeTrueForge(
         [FakeTurn(output=json.dumps(COMPATIBILITY_ATTACK), events=adversarial_events())]
     )
-    tester, _ = build_tester(fake, engine)
+    tester, _ = build_tester(fake, engine, sandbox_enabled=True)
 
     report = await tester.attack(world)
 
@@ -118,7 +119,7 @@ async def test_sandbox_evidence_is_never_machine_verifiable() -> None:
     fake = FakeTrueForge(
         [FakeTurn(output=json.dumps(COMPATIBILITY_ATTACK), events=adversarial_events())]
     )
-    tester, _ = build_tester(fake, engine)
+    tester, _ = build_tester(fake, engine, sandbox_enabled=True)
 
     report = await tester.attack(world)
 

@@ -23,8 +23,11 @@ world was safely attacked".
 No model is called: every turn here is scripted through the fake transport.
 """
 
+import inspect
 import json
+import sys
 
+import httpx
 import pytest
 
 from app.api.dependencies import build_agent_orchestrator, build_commit_operator
@@ -43,6 +46,7 @@ from app.infrastructure.demo.engine import DemoProductionEngine
 from app.infrastructure.trueforge.adversary import (
     DOPPELGANGER_TOOLS,
     SANDBOX_EVIDENCE_SOURCE,
+    TrueForgeAdversarialTester,
 )
 from app.infrastructure.trueforge.commit_operator import (
     COMMIT_OPERATOR_TOOLS,
@@ -137,6 +141,34 @@ def commit_operator_spec() -> dict:
 
 
 # ----- 1-2. the flag is the whole switch --------------------------------------
+
+
+def test_sandbox_execution_is_opt_in_at_every_default() -> None:
+    """Unset means off — in the settings the docs describe, and in the adapter.
+
+    ``Settings()`` would read this repo's own ``.env``, so the field default is
+    asserted directly: the guarantee is about a deployment that configures
+    nothing at all.
+    """
+    assert Settings.model_fields["trueforge_sandbox_enabled"].default is False
+    assert (
+        inspect.signature(TrueForgeAdversarialTester.__init__).parameters["sandbox_enabled"].default
+        is False
+    )
+
+
+def test_an_unconfigured_deployment_gets_no_sandbox() -> None:
+    """The end-to-end reading of the default: no env, no ``.env``, no sandbox."""
+    settings = Settings(_env_file=None, model="fake/model")
+    tester = TrueForgeAdversarialTester(
+        FakeTrueForge([]).client(),
+        DemoProductionEngine(),
+        model=settings.resolve_model(),
+        bindings=InMemorySessionBindingStore(),
+        sandbox_enabled=settings.trueforge_sandbox_enabled,
+    )
+
+    assert tester.agent_spec("run_1", "world_alpha")["config"]["sandbox"] == {"enabled": False}
 
 
 def test_doppelganger_has_no_sandbox_when_the_flag_is_off() -> None:
@@ -488,6 +520,17 @@ async def test_a_dead_sandbox_session_never_reads_as_a_safe_attack() -> None:
 # below calls a model: the same fake transport serves TrueForge.
 
 
+@pytest.fixture(autouse=True)
+def isolated_smoke_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give every test its own stage ledger.
+
+    ``record`` appends to a module-level list and the script's exit code is
+    derived from it, so a shared ledger would let one test's failure decide
+    another test's result.
+    """
+    monkeypatch.setattr(smoke, "_results", [])
+
+
 def last_result() -> tuple[str, str, str]:
     """The most recent stage the smoke script recorded."""
     return smoke._results[-1]
@@ -624,4 +667,133 @@ async def test_smoke_stays_green_without_a_sandbox_when_it_is_not_required() -> 
 
     _, status, _ = last_result()
     assert passed is True
+    assert status == smoke.SKIP
+
+
+# ----- the sandbox assertion cannot be silently skipped ------------------------
+#
+# ``--require-sandbox`` is the flag that turns the live E2E into proof. A run
+# carrying it must never exit 0 without stage 14 having actually asserted
+# something — not when another flag suppresses the live flow, and not when the
+# environment cannot produce one.
+
+
+class NoNetworkHTTP:
+    """Stands in for the smoke script's own HTTP client: every request refuses.
+
+    These tests are about exit codes, so anything that escapes the stages under
+    test must fail loudly rather than reach a real socket.
+    """
+
+    def __init__(self, **kwargs: object) -> None:
+        pass
+
+    async def __aenter__(self) -> "NoNetworkHTTP":
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> bool:
+        return False
+
+    async def get(self, *args: object, **kwargs: object) -> object:
+        raise httpx.ConnectError("no network in tests")
+
+    async def post(self, *args: object, **kwargs: object) -> object:
+        raise httpx.ConnectError("no network in tests")
+
+
+async def _passing_stage(*args: object, **kwargs: object) -> bool:
+    return True
+
+
+async def run_smoke_cli(
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+    fake: FakeTrueForge,
+    *,
+    backend_reachable: bool = True,
+) -> int:
+    """Run the smoke script's whole CLI offline and return its exit code."""
+    client = fake.client()
+    monkeypatch.setattr(smoke.httpx, "AsyncClient", NoNetworkHTTP)
+    monkeypatch.setattr(smoke, "TrueForgeClient", lambda **kwargs: client)
+    monkeypatch.setattr(sys, "argv", ["smoke_trueforge.py", *argv])
+    if backend_reachable:
+        for stage in (
+            "stage_backend_health",
+            "stage_trueforge_health",
+            "stage_mcp_visible",
+            "stage_tool_annotations",
+        ):
+            monkeypatch.setattr(smoke, stage, _passing_stage)
+    try:
+        return await smoke.main()
+    finally:
+        await client.aclose()
+
+
+async def test_require_sandbox_refuses_to_run_alongside_checks_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Honouring both would exit 0 having asserted nothing at all."""
+    monkeypatch.setattr(sys, "argv", ["smoke_trueforge.py", "--checks-only", "--require-sandbox"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        await smoke.main()
+
+    assert exit_info.value.code == 2
+
+
+async def test_require_sandbox_fails_when_no_model_provider_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a provider there is no live run, so there is nothing to prove."""
+    exit_code = await run_smoke_cli(monkeypatch, ["--require-sandbox"], FakeTrueForge(models=[]))
+
+    assert exit_code == 1
+    assert any(status == smoke.FAIL for _, status, _ in smoke._results)
+
+
+async def test_a_missing_model_provider_alone_is_still_only_a_skip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The control case: nothing was demanded, so nothing failed."""
+    exit_code = await run_smoke_cli(monkeypatch, [], FakeTrueForge(models=[]))
+
+    assert exit_code == 0
+    assert not any(status == smoke.FAIL for _, status, _ in smoke._results)
+
+
+async def test_require_sandbox_fails_when_the_live_run_never_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A provider exists but the backend does not: stage 14 never runs, exit nonzero."""
+    exit_code = await run_smoke_cli(
+        monkeypatch, ["--require-sandbox"], FakeTrueForge(), backend_reachable=False
+    )
+
+    assert exit_code == 1
+
+
+async def test_model_gate_fails_rather_than_skips_when_sandbox_proof_is_required() -> None:
+    fake = FakeTrueForge(models=[])
+    client = fake.client()
+
+    available = await smoke.stage_model_available(client, require_sandbox=True)
+    await client.aclose()
+
+    _, status, detail = last_result()
+    assert available is False
+    assert status == smoke.FAIL
+    assert "--require-sandbox" in detail
+
+
+async def test_model_gate_still_skips_when_no_sandbox_proof_was_demanded() -> None:
+    fake = FakeTrueForge(models=[])
+    client = fake.client()
+
+    available = await smoke.stage_model_available(client, require_sandbox=False)
+    await client.aclose()
+
+    _, status, _ = last_result()
+    assert available is False
     assert status == smoke.SKIP

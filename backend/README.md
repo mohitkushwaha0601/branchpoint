@@ -166,7 +166,7 @@ uv run uvicorn app.main:app --port 8000     npx @truefoundry/trueforge@0.1.4
 # 3. model provider (key lives in TrueForge, never here)
 # 4. register the MCP server + see how TrueForge classifies each tool
 ../trueforge/scripts/setup_trueforge.sh
-# 5. sandbox (optional, DOPPELGÄNGER only; TrueForge has a local fallback)
+# 5. sandbox (opt-in, off unless set; DOPPELGÄNGER only)
 #    export BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED=true
 # 6. start an agent run
 export BRANCHPOINT_MODEL="<provider>/<model-id>"   # one model for every agent
