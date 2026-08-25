@@ -2,10 +2,15 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Install Python3 and curl (needed for setup script and API calls)
+# Install all dependencies TrueForge needs (including sandbox dependencies)
 RUN apt-get update && apt-get install -y \
     python3 \
     curl \
+    bubblewrap \
+    socat \
+    ripgrep \
+    ca-certificates \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Create volume directory for SQLite persistence
