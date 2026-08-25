@@ -289,8 +289,6 @@ class TrueForgeClient:
                 thread_id=str(action.get("thread_id", "")),
                 tool_call_id=str(call.get("id", "")),
                 source_event_id=str(call.get("source_event_id", "")),
-                name=str(call.get("name", "") or ""),
-                arguments=str(call.get("arguments", "") or ""),
             )
             for action in state.get("required_actions", [])
             if action.get("type") == EVENT_TOOL_APPROVAL_REQUIRED

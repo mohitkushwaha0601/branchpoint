@@ -18,15 +18,21 @@ tool's own approval check, Phase 1's ``assert_commit_allowed``, and the
 one-time capability — none of which trust this one.
 """
 
-import json
-from typing import Any
-
 from app.application.ports import CommitOperatorReport
 from app.domain.runs.models import BranchpointRun
 from app.domain.worlds.models import World
 from app.infrastructure.trueforge.client import TrueForgeClient
-from app.infrastructure.trueforge.errors import TrueForgeError, TurnFailedError
-from app.infrastructure.trueforge.models import TurnResult, TurnStatus
+from app.infrastructure.trueforge.errors import (
+    ToolCallResolutionError,
+    TrueForgeError,
+    TurnFailedError,
+)
+from app.infrastructure.trueforge.models import (
+    PendingApproval,
+    ToolCallForm,
+    TurnResult,
+    TurnStatus,
+)
 from app.infrastructure.trueforge.sessions import (
     InMemorySessionBindingStore,
     SessionPurpose,
@@ -183,54 +189,60 @@ class TrueForgeCommitOperator:
             detail=f"{COMMIT_TOOL_NAME} approved and resumed in session {session_id}",
         )
 
-    @staticmethod
     def _assert_sanctioned(
+        self,
         result: TurnResult,
-        pending: Any,
+        pending: PendingApproval,
         run_id: str,
         world_id: str,
         action_id: str,
     ) -> None:
         """Refuse anything but the exact approved commit call.
 
-        Fails closed on an unidentifiable call: approving a tool call whose name
-        and arguments cannot be read would defeat the entire gate.
+        Works only with the *resolved effective invocation*: which tool will
+        really run, on which server, with which arguments. TrueForge may
+        express that call directly or through its ``call_tool`` deferred
+        wrapper, and both reach here as the same three facts — so this check
+        cannot be fooled by approving a wrapper whose target it never read.
         """
         call = result.paused_tool_call(pending)
         if call is None:
             raise UnsanctionedToolCallError(
-                f"paused tool call {pending.tool_call_id} could not be identified; refusing it"
-            )
-        if call.name != COMMIT_TOOL_NAME:
-            raise UnsanctionedToolCallError(
-                f"paused tool call is {call.name!r}, not the sanctioned {COMMIT_TOOL_NAME!r}"
+                f"paused tool call {pending.tool_call_id or '<unnamed>'} could not be "
+                f"resolved from source event {pending.source_event_id or '<missing>'}; "
+                "refusing it"
             )
 
         try:
-            arguments = json.loads(call.arguments) if call.arguments else {}
-        except json.JSONDecodeError as exc:
+            invocation = call.resolve()
+        except ToolCallResolutionError as exc:
             raise UnsanctionedToolCallError(
-                f"paused commit call had unparseable arguments: {exc}"
+                f"paused tool call {call.id} could not be resolved: {exc}"
             ) from exc
-        if not isinstance(arguments, dict):
-            raise UnsanctionedToolCallError("paused commit call arguments were not an object")
 
-        expected = {"run_id": run_id, "world_id": world_id}
-        for field, approved_value in expected.items():
-            if arguments.get(field) != approved_value:
-                raise UnsanctionedToolCallError(
-                    f"paused commit call targets {field}={arguments.get(field)!r}, "
-                    f"but the human approved {approved_value!r}"
-                )
-        # Optional upstream, but never permitted to *disagree* with the approval.
-        requested_action = arguments.get("expected_action_id")
-        if requested_action is not None and requested_action != action_id:
+        if invocation.effective_tool_name != COMMIT_TOOL_NAME:
             raise UnsanctionedToolCallError(
-                f"paused commit call targets action {requested_action!r}, "
-                f"but the human approved {action_id!r}"
+                f"paused tool call effectively targets {invocation.effective_tool_name!r} "
+                f"(as {invocation.raw_function_name!r}), "
+                f"not the sanctioned {COMMIT_TOOL_NAME!r}"
             )
 
-    async def _deny(self, session_id: str, pending: Any, reason: str) -> None:
+        # A deferred wrapper always names its server, so it is always checked.
+        # A direct call is checked whenever TrueForge stated one.
+        if invocation.form is ToolCallForm.DEFERRED or invocation.effective_server_name:
+            if invocation.effective_server_name != self._mcp_server_name:
+                raise UnsanctionedToolCallError(
+                    f"paused commit call targets MCP server "
+                    f"{invocation.effective_server_name!r}, "
+                    f"not {self._mcp_server_name!r}"
+                )
+
+        _assert_commit_input(
+            invocation.effective_arguments,
+            {"run_id": run_id, "world_id": world_id, "expected_action_id": action_id},
+        )
+
+    async def _deny(self, session_id: str, pending: PendingApproval, reason: str) -> None:
         """Deny a paused tool call, best effort — the raise that follows is the outcome."""
         try:
             await self._client.resume_turn_with_approval(
@@ -272,6 +284,32 @@ class TrueForgeCommitOperator:
             trueforge_session_id=session_id,
             status=SessionStatus.FAILED,
         )
+
+
+def _assert_commit_input(arguments: dict[str, object], approved: dict[str, str]) -> None:
+    """Require the effective commit input to be exactly what a human approved.
+
+    Exact means exact: the same three keys, all strings, all equal. No extra
+    argument, no missing one, no renamed one, and nothing coerced on the way in.
+    """
+    if set(arguments) != set(approved):
+        raise UnsanctionedToolCallError(
+            f"paused commit call takes {sorted(arguments)}, "
+            f"but an approved commit takes exactly {sorted(approved)}"
+        )
+
+    non_strings = sorted(key for key, value in arguments.items() if not isinstance(value, str))
+    if non_strings:
+        raise UnsanctionedToolCallError(
+            f"paused commit call arguments {non_strings} are not strings"
+        )
+
+    for field, approved_value in approved.items():
+        if arguments[field] != approved_value:
+            raise UnsanctionedToolCallError(
+                f"paused commit call targets {field}={arguments[field]!r}, "
+                f"but the human approved {approved_value!r}"
+            )
 
 
 def _assert_turn_usable(result: TurnResult) -> None:

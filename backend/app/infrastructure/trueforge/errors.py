@@ -33,6 +33,15 @@ class TurnFailedError(TrueForgeError):
         self.status = status
 
 
+class ToolCallResolutionError(TrueForgeError):
+    """Raised when a tool call cannot be resolved to exactly one invocation.
+
+    Structural only: it says the wire could not be read unambiguously, never
+    that the resolved call was disallowed. Deciding whether a resolved
+    invocation is *permitted* belongs to the caller that knows the policy.
+    """
+
+
 class StructuredOutputError(TrueForgeError):
     """Raised when a turn's final message is not the bounded JSON we required.
 
