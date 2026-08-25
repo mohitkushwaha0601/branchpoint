@@ -14,6 +14,7 @@ single source of truth for demo production state in the process.
 """
 
 import asyncio
+from pathlib import Path
 
 from app.domain.actions.models import CandidateAction
 from app.domain.commits.models import OperationReceipt
@@ -21,7 +22,7 @@ from app.domain.runs.models import BranchpointRun
 from app.domain.worlds.models import World
 from app.infrastructure.demo.actions import apply_action
 from app.infrastructure.demo.capability import CapabilityStore
-from app.infrastructure.demo.scenario import DEFAULT_SCENARIO_PATH, load_initial_state
+from app.infrastructure.demo.scenario import load_initial_state
 from app.infrastructure.demo.state import DemoProductionState
 
 
@@ -36,7 +37,9 @@ class UnknownWorldError(Exception):
 class DemoProductionEngine:
     """Owns the current reality snapshot and one snapshot per counterfactual world."""
 
-    def __init__(self, *, scenario_path=DEFAULT_SCENARIO_PATH) -> None:
+    def __init__(self, *, scenario_path: Path | None = None) -> None:
+        """``scenario_path`` overrides the fixture (packaged default, or
+        ``BRANCHPOINT_DEMO_SCENARIO_PATH``) — mainly for tests."""
         self._scenario_path = scenario_path
         self._reality = load_initial_state(scenario_path)
         self._worlds: dict[str, DemoProductionState] = {}

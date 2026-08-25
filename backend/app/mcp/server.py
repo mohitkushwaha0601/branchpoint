@@ -18,6 +18,7 @@ from typing import Annotated, Literal
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 
@@ -45,6 +46,39 @@ READ_TOOL_ANNOTATIONS = ToolAnnotations(
 DESTRUCTIVE_TOOL_ANNOTATIONS = ToolAnnotations(
     read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False
 )
+
+#: Host/Origin values a local BRANCHPOINT deployment is ever legitimately
+#: reached on. Bare and wildcard-port forms are both listed because different
+#: clients omit the port for the default HTTP port and others always include it.
+LOCAL_MCP_HOSTS = ["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", "[::1]", "[::1]:*"]
+LOCAL_MCP_ORIGINS = [f"http://{host}" for host in LOCAL_MCP_HOSTS]
+
+
+def build_transport_security(*, insecure_localhost: bool = False) -> TransportSecuritySettings:
+    """Build the MCP transport security policy.
+
+    Defaults to DNS-rebinding Host/Origin validation restricted to localhost —
+    the deployment-independent backstop for "only reachable from localhost":
+    it rejects any request whose Host/Origin doesn't claim to be local,
+    regardless of which interface the process happens to be bound to. It is
+    not the authorization boundary for mutations (the one-time commit
+    capability is — see :mod:`app.infrastructure.demo.capability`), but read
+    tools have no capability gate, so this is what stands between them and
+    the network.
+
+    ``insecure_localhost=True`` disables validation entirely. Callers should
+    only ever pass this from an explicit opt-in setting
+    (``BRANCHPOINT_MCP_INSECURE_LOCALHOST``), never as a default, and even
+    then this process should still only be bound to a loopback interface.
+    """
+    if insecure_localhost:
+        return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=LOCAL_MCP_HOSTS,
+        allowed_origins=LOCAL_MCP_ORIGINS,
+    )
+
 
 #: Deployment versions this demo's mutation tools may set. Any other string is
 #: rejected by the tool's own input schema before the handler ever runs.

@@ -14,14 +14,13 @@ import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.server.mcpserver import MCPServer
-from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.routing import Mount
 
 from app.infrastructure.demo.capability import CapabilityStore
 from app.infrastructure.demo.engine import DemoProductionEngine
 from app.infrastructure.persistence.memory import InMemoryRunRepository
-from app.mcp.server import build_mcp_server
+from app.mcp.server import build_mcp_server, build_transport_security
 
 
 class MCPTestHarness:
@@ -41,17 +40,18 @@ class MCPTestHarness:
 
 
 def _build_isolated_app(mcp: MCPServer) -> Starlette:
-    mcp_app = mcp.streamable_http_app(
-        streamable_http_path="/",
-        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
-    )
+    # Mirrors app/main.py exactly: default streamable_http_path ("/mcp"),
+    # mounted at root, and the same (secure-by-default) transport security
+    # policy — so a test passing here is evidence the real app's mount and
+    # security configuration actually behave this way too.
+    mcp_app = mcp.streamable_http_app(transport_security=build_transport_security())
 
     @asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncIterator[None]:
         async with mcp.session_manager.run():
             yield
 
-    return Starlette(routes=[Mount("/mcp", app=mcp_app)], lifespan=lifespan)
+    return Starlette(routes=[Mount("/", app=mcp_app)], lifespan=lifespan)
 
 
 @pytest.fixture
@@ -72,8 +72,10 @@ async def mcp_session(harness: MCPTestHarness) -> AsyncIterator[ClientSession]:
     test_app = _build_isolated_app(harness.mcp)
     transport = httpx2.ASGITransport(app=test_app)
     async with harness.mcp.session_manager.run():
-        async with httpx2.AsyncClient(transport=transport, base_url="http://test") as http_client:
-            async with streamable_http_client("http://test/mcp/", http_client=http_client) as (
+        async with httpx2.AsyncClient(
+            transport=transport, base_url="http://localhost"
+        ) as http_client:
+            async with streamable_http_client("http://localhost/mcp", http_client=http_client) as (
                 read,
                 write,
             ):

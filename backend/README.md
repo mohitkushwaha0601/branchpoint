@@ -96,7 +96,7 @@ CREATED → PREPARING → EXECUTING → ATTACKING → EVALUATING → SURVIVED | 
 
 ## Demo Production: the checkout incident
 
-Phase 2 adds a small, deterministic **Operational Digital Twin** of a commerce system — no real microservices, no Kubernetes, just typed in-memory state under `app/infrastructure/demo/`, seeded from [`scenarios/checkout_regression.json`](scenarios/checkout_regression.json).
+Phase 2 adds a small, deterministic **Operational Digital Twin** of a commerce system — no real microservices, no Kubernetes, just typed in-memory state under `app/infrastructure/demo/`, seeded from the packaged fixture [`app/infrastructure/demo/scenarios/checkout_regression.json`](app/infrastructure/demo/scenarios/checkout_regression.json) (ships inside the wheel; override with `BRANCHPOINT_DEMO_SCENARIO_PATH`).
 
 **Initial incident:** `pricing-service` is on `v2.41` (previous version `v2.40`) with the `PRICING_V2` flag enabled and 4 replicas. This combination activates a pricing regression: checkout error rate ≈ **41.3%**, p95 latency ≈ **4.8s**, ≈ **8,000** affected users/day. Five synthetic orders exist; three were created under `v2.41` and carry a `payment_revision` field — a schema-41 addition `v2.40` has no code path for.
 
@@ -131,7 +131,9 @@ BRANCHPOINT exposes the demo digital twin through a real MCP server (`app/mcp/se
 uv run uvicorn app.main:app --reload
 ```
 
-**Endpoint:** `POST http://localhost:8000/mcp` (plus the existing `GET /health`). This binds to localhost only; DNS-rebinding host/origin checks are intentionally disabled for local demo use (see the comment in `app/main.py`) since the one-time commit capability, not the `Host` header, is the real authorization boundary — revisit before ever exposing this beyond localhost.
+**Endpoint:** `POST http://localhost:8000/mcp` (plus the existing `GET /health`). The MCP sub-app is mounted at the FastAPI root with its default path, so this resolves directly — no trailing-slash redirect for a client to (possibly incorrectly) follow.
+
+DNS-rebinding Host/Origin validation is **on** by default, restricted to `localhost`/`127.0.0.1`/`[::1]` (with and without a port). This is the backstop for "only reachable from localhost" — it rejects requests whose Host/Origin doesn't claim to be local, independent of which interface the process is actually bound to. It is not the authorization boundary for mutations (the one-time commit capability is — see **Security model** below), but read tools have no capability gate, so this is what stands between them and the network. Set `BRANCHPOINT_MCP_INSECURE_LOCALHOST=true` to disable it (an explicit opt-in only; never do this on a non-loopback bind).
 
 **Tools** (10 total, every one carries explicit `readOnlyHint`/`destructiveHint` annotations — `tests/mcp/test_mcp_server.py` asserts none ships without them):
 
