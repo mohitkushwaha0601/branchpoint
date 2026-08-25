@@ -18,8 +18,8 @@ COPY app ./app
 # Install the project into the environment after source is present.
 RUN uv sync --frozen --no-dev
 
-# Create and use a non-root user.
-RUN useradd --create-home --uid 10001 appuser
+# Create and use a non-root user. The app's .venv must be writable by that user.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000
