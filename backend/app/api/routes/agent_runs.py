@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import (
+    BackgroundRunnerDep,
     EventSinkDep,
     RunRepositoryDep,
     SessionBindingStoreDep,
@@ -75,6 +76,19 @@ class ApproveRunRequest(BaseModel):
     expected_world_id: str | None = None
     expected_action_id: str | None = None
     expected_action_fingerprint: str | None = None
+
+
+class AcceptedRunResponse(BaseModel):
+    """What ``POST /api/v1/agent-runs`` returns, before any agent work happens.
+
+    Carries the id of the run the background drive will operate on — the same
+    run, never a copy — so a client can navigate to it and start watching the
+    timeline immediately.
+    """
+
+    run_id: str
+    status: RunStatus
+    detail: str
 
 
 class ApprovalDecisionResponse(BaseModel):
@@ -228,22 +242,33 @@ class ComparisonDetailResponse(BaseModel):
         )
 
 
-@router.post("/agent-runs", response_model=AgentRunResponse)
+@router.post(
+    "/agent-runs",
+    response_model=AcceptedRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def start_agent_run(
     body: StartAgentRunRequest,
-    repository: RunRepositoryDep,
     events: EventSinkDep,
     bindings: SessionBindingStoreDep,
-) -> AgentRunResponse:
-    """Start a TrueForge-backed run and drive it to the approval gate.
+    runner: BackgroundRunnerDep,
+) -> AcceptedRunResponse:
+    """Open a TrueForge-backed run and drive it to the approval gate in the background.
 
-    Returns once the run is awaiting human approval (or has been rejected).
-    Nothing in reality has changed.
+    Returns ``202`` as soon as the run exists, so Mission Control can navigate
+    to it and watch the real lifecycle rather than staring at a blocked POST for
+    the length of a planning pass.
+
+    The drive runs in this process against **this same run id**. It stops at
+    ``AWAITING_APPROVAL`` (or a terminal rejection): committing still requires
+    the separate, human-approved path, and nothing in reality has changed when
+    this returns.
     """
     settings: Settings = get_settings()
     try:
-        # Called for its check: a run must not start half-configured. The same
-        # resolution runs again inside ``build_agent_orchestrator``.
+        # Checked before the run exists: a half-configured run would be created
+        # only to fail on its first agent call. The same resolution runs again
+        # inside ``build_agent_orchestrator``.
         settings.resolve_model()
     except ModelNotConfiguredError as exc:
         raise HTTPException(
@@ -253,14 +278,18 @@ async def start_agent_run(
     service = AgentRunService(
         orchestrator=build_agent_orchestrator(), events=events, bindings=bindings
     )
-    try:
-        run = await service.drive_to_approval(body.to_incident())
-    except TrueForgeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"TrueForge failure: {exc}"
-        ) from exc
+    run = await service.create_run(body.to_incident())
 
-    return await _agent_run_response(run.run_id, repository, bindings)
+    # ``drive_safely`` turns any pipeline failure into this run's own FAILED
+    # state, so a client watching the run always learns what happened.
+    started = runner.start(run.run_id, lambda: service.drive_safely(run.run_id))
+    if not started:  # pragma: no cover - a fresh run id cannot already be running
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"run {run.run_id} is already being driven",
+        )
+
+    return AcceptedRunResponse(run_id=run.run_id, status=run.status, detail="run accepted")
 
 
 @router.get("/agent-runs/{run_id}", response_model=AgentRunResponse)

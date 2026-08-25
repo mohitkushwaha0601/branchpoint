@@ -7,11 +7,11 @@ import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { heroRun } from "../data/heroRun";
-import { lane, renderRun } from "./renderRun";
+import { lane, renderFixture } from "./renderRun";
 
 describe("hero run", () => {
   it("renders the run identity and status", () => {
-    renderRun();
+    renderFixture();
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Checkout Regression" }),
@@ -21,14 +21,18 @@ describe("hero run", () => {
   });
 
   it("renders the incident readings and current reality", () => {
-    renderRun();
+    renderFixture();
 
-    const incident = within(screen.getByRole("region", { name: "INCIDENT" }));
+    const incident = within(
+      screen.getByRole("region", { name: "OBSERVED METRICS" }),
+    );
     expect(incident.getByText("41.3%")).toBeInTheDocument();
     expect(incident.getByText("4.8s")).toBeInTheDocument();
     expect(incident.getByText("12.4k")).toBeInTheDocument();
 
-    const reality = within(screen.getByRole("region", { name: "REALITY" }));
+    const reality = within(
+      screen.getByRole("region", { name: "CURRENT REALITY" }),
+    );
     expect(reality.getByText("v2.41")).toBeInTheDocument();
     expect(reality.getByText("ON")).toBeInTheDocument();
     expect(reality.getByText("4")).toBeInTheDocument();
@@ -36,7 +40,7 @@ describe("hero run", () => {
   });
 
   it("renders every stage of the pipeline with approval current", () => {
-    renderRun();
+    renderFixture();
 
     const rail = screen.getByRole("navigation", { name: "Run stages" });
     for (const label of [
@@ -61,7 +65,7 @@ describe("hero run", () => {
 
 describe("branch graph", () => {
   it("renders three world lanes", () => {
-    renderRun();
+    renderFixture();
 
     expect(lane("WORLD α")).toBeInTheDocument();
     expect(lane("WORLD β")).toBeInTheDocument();
@@ -69,7 +73,7 @@ describe("branch graph", () => {
   });
 
   it("shows Alpha as VETOED with its reason", () => {
-    renderRun();
+    renderFixture();
 
     const alpha = lane("WORLD α");
     expect(within(alpha).getByText("VETOED")).toBeInTheDocument();
@@ -79,7 +83,7 @@ describe("branch graph", () => {
   });
 
   it("shows Beta as SURVIVED and RECOMMENDED", () => {
-    renderRun();
+    renderFixture();
 
     const beta = lane("WORLD β");
     expect(within(beta).getByText("SURVIVED")).toBeInTheDocument();
@@ -89,7 +93,7 @@ describe("branch graph", () => {
   });
 
   it("shows Gamma as SURVIVED but not recommended", () => {
-    renderRun();
+    renderFixture();
 
     const gamma = lane("WORLD γ");
     expect(within(gamma).getByText("SURVIVED")).toBeInTheDocument();
@@ -98,7 +102,7 @@ describe("branch graph", () => {
   });
 
   it("renders each world's pipeline rows as activatable controls", () => {
-    renderRun();
+    renderFixture();
 
     const alpha = lane("WORLD α");
     expect(

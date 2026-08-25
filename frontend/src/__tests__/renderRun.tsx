@@ -1,8 +1,9 @@
 /**
- * Shared harness: mount the app at the hero run's route.
+ * Mounting helpers.
  *
- * Tests drive the real router and the real data module rather than a stub, so
- * what they assert is what a reviewer would actually see on screen.
+ * `renderApp` drives the real router, the real API client, the real adapters,
+ * and the real components — only `fetch` is mocked. `renderFixture` mounts the
+ * offline Phase 4.1 fixture, which is what the Phase 4.1 interaction tests use.
  */
 
 import { render } from "@testing-library/react";
@@ -10,9 +11,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 import { AppRoutes } from "../app/router";
-import { heroRun } from "../data/heroRun";
+import { RUN_ID } from "./apiFixtures";
 
-export function renderRun(path = `/runs/${heroRun.runId}`) {
+export function renderApp(path = `/runs/${RUN_ID}`) {
   const user = userEvent.setup();
   const view = render(
     <MemoryRouter initialEntries={[path]}>
@@ -20,6 +21,11 @@ export function renderRun(path = `/runs/${heroRun.runId}`) {
     </MemoryRouter>,
   );
   return { ...view, user };
+}
+
+/** The offline fixture route. No network, no polling. */
+export function renderFixture() {
+  return renderApp("/demo/hero");
 }
 
 /** The inspector column, so assertions can be scoped away from the graph. */

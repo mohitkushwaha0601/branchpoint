@@ -21,6 +21,7 @@ from fastapi import Depends
 
 from app.application.orchestration.approval import ApprovalCoordinator
 from app.application.orchestration.orchestrator import BranchpointOrchestrator
+from app.application.orchestration.task_runner import BackgroundTaskRunner
 from app.infrastructure.demo.adapters import (
     DemoRealityMutator,
     DemoRealityReader,
@@ -84,6 +85,17 @@ RunRepositoryDep = Annotated[InMemoryRunRepository, Depends(get_run_repository)]
 EventSinkDep = Annotated[InMemoryEventSink, Depends(get_event_sink)]
 OrchestratorDep = Annotated[BranchpointOrchestrator, Depends(get_orchestrator)]
 DemoOrchestratorDep = Annotated[BranchpointOrchestrator, Depends(get_demo_orchestrator)]
+
+
+@lru_cache
+def get_background_runner() -> BackgroundTaskRunner:
+    """Return the process-wide runner that owns in-flight agent-run drives.
+
+    Process-wide because the run repository it writes through is too: a second
+    backend process would have neither this runner's tasks nor those runs.
+    **One process is the deployment requirement.**
+    """
+    return BackgroundTaskRunner()
 
 
 @lru_cache
@@ -178,3 +190,4 @@ def build_approval_coordinator() -> ApprovalCoordinator:
 
 
 SessionBindingStoreDep = Annotated[InMemorySessionBindingStore, Depends(get_session_binding_store)]
+BackgroundRunnerDep = Annotated[BackgroundTaskRunner, Depends(get_background_runner)]

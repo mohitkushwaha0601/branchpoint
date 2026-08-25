@@ -6,11 +6,11 @@
 import { within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { inspector, lane, renderRun } from "./renderRun";
+import { inspector, lane, renderFixture } from "./renderRun";
 
 describe("inspector", () => {
   it("defaults to the recommended world", () => {
-    renderRun();
+    renderFixture();
 
     const panel = inspector();
     expect(within(panel).getByText("Disable Pricing V2")).toBeInTheDocument();
@@ -22,7 +22,7 @@ describe("inspector", () => {
   });
 
   it("shows the recommended world's replayed invariants, all passing", () => {
-    const panel = (renderRun(), inspector());
+    const panel = (renderFixture(), inspector());
 
     for (const claim of [
       "healthy_checkout",
@@ -38,7 +38,7 @@ describe("inspector", () => {
   });
 
   it("attributes the comparator, not a model, for the recommendation", () => {
-    const panel = (renderRun(), inspector());
+    const panel = (renderFixture(), inspector());
 
     expect(
       within(panel).getByText("Ranked first by deterministic comparator."),
@@ -46,7 +46,7 @@ describe("inspector", () => {
   });
 
   it("switches to Alpha when its lane is selected", async () => {
-    const { user } = renderRun();
+    const { user } = renderFixture();
 
     await user.click(
       within(lane("WORLD α")).getByRole("button", {
@@ -65,7 +65,7 @@ describe("inspector", () => {
   });
 
   it("switches back to Beta when its lane is selected", async () => {
-    const { user } = renderRun();
+    const { user } = renderFixture();
 
     await user.click(
       within(lane("WORLD α")).getByRole("button", {
@@ -82,7 +82,7 @@ describe("inspector", () => {
   });
 
   it("shows the selected pipeline step when a row is activated", async () => {
-    const { user } = renderRun();
+    const { user } = renderFixture();
 
     await user.click(
       within(lane("WORLD α")).getByRole("button", {
@@ -98,7 +98,7 @@ describe("inspector", () => {
   });
 
   it("is reachable by keyboard", async () => {
-    const { user } = renderRun();
+    const { user } = renderFixture();
 
     const alphaTitle = within(lane("WORLD α")).getByRole("button", {
       name: /Rollback Pricing Deployment/,
@@ -113,7 +113,7 @@ describe("inspector", () => {
 
 describe("evidence authority", () => {
   it("labels sandbox evidence EXPLORATORY and replay evidence VERIFIED", () => {
-    renderRun();
+    renderFixture();
 
     const panel = inspector();
     expect(within(panel).getByText("EXPLORATORY")).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe("evidence authority", () => {
   });
 
   it("labels both voices inside every world lane", () => {
-    renderRun();
+    renderFixture();
 
     for (const label of ["WORLD α", "WORLD β", "WORLD γ"]) {
       const section = lane(label);
@@ -134,7 +134,7 @@ describe("evidence authority", () => {
   });
 
   it("never marks sandbox output as verified", () => {
-    renderRun();
+    renderFixture();
 
     const alpha = within(lane("WORLD α"));
     const sandbox = within(

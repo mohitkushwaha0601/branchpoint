@@ -92,6 +92,18 @@ class Settings(BaseSettings):
     the machine-verifiable failing evidence a veto requires.
     """
 
+    cors_allow_origins: str = ""
+    """Comma-separated browser origins allowed to call this API.
+
+    Empty by default, which installs no CORS middleware at all: local
+    development goes through the Vite dev-server proxy, so the browser only ever
+    talks to its own origin and CORS never enters the picture.
+
+    Set this only for a deployed frontend on a different origin, and set it to
+    exact origins — ``https://branchpoint.vercel.app``, never ``*``. Credentials
+    are never enabled, so a wildcard could not be combined with them anyway.
+    """
+
     demo_scenario_path: str | None = None
     """Override path to the hero scenario fixture (``BRANCHPOINT_DEMO_SCENARIO_PATH``).
 
@@ -99,6 +111,15 @@ class Settings(BaseSettings):
     ``app.infrastructure.demo``, which works regardless of how the package was
     installed. Set this only to point at a different scenario file.
     """
+
+    def resolve_cors_origins(self) -> tuple[str, ...]:
+        """Return the configured browser origins, trimmed and de-duplicated."""
+        seen: dict[str, None] = {}
+        for origin in self.cors_allow_origins.split(","):
+            trimmed = origin.strip()
+            if trimmed:
+                seen.setdefault(trimmed, None)
+        return tuple(seen)
 
     def resolve_model(self) -> str:
         """Return the single model FQN every TrueForge-backed agent must use.

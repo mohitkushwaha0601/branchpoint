@@ -8,12 +8,40 @@
  * the UI may present the first as the second.
  */
 
+/**
+ * The backend's own run lifecycle, adopted verbatim.
+ *
+ * Narrowing it here would mean the UI inventing a vocabulary the server does
+ * not use, and then having to guess which server state maps to which invented
+ * one. Displaying the real state is both simpler and more truthful.
+ */
 export type RunStatus =
-  | "RUNNING"
+  | "CREATED"
+  | "OBSERVING"
+  | "PLANNING"
+  | "FORKING"
+  | "EXECUTING_WORLDS"
+  | "ADVERSARIAL_TESTING"
+  | "COMPARING"
   | "AWAITING_APPROVAL"
+  | "APPROVED"
+  | "COMMITTING"
+  | "VERIFYING"
   | "SUCCEEDED"
   | "REJECTED"
   | "FAILED";
+
+/** Statuses after which nothing further happens on its own. */
+export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = [
+  "SUCCEEDED",
+  "REJECTED",
+  "FAILED",
+];
+
+/** Whether a run is still advancing and therefore worth polling. */
+export function isRunActive(status: RunStatus): boolean {
+  return !TERMINAL_RUN_STATUSES.includes(status) && status !== "AWAITING_APPROVAL";
+}
 
 export type StageId =
   | "OBSERVE"
@@ -28,7 +56,12 @@ export type StageId =
 
 export type StageStatus = "complete" | "current" | "pending" | "failed";
 
-export type WorldVerdict = "SURVIVED" | "VETOED" | "INCONCLUSIVE";
+export type WorldVerdict =
+  | "SURVIVED"
+  | "VETOED"
+  | "INCONCLUSIVE"
+  /** No verdict yet: the world exists but has not been evaluated. */
+  | "PENDING";
 
 export type PipelineStatus = "passed" | "failed" | "running" | "skipped";
 
@@ -82,7 +115,8 @@ export interface Action {
   from: string;
   to: string;
   fingerprint: string;
-  reversible: boolean;
+  /** `null` when the API does not say. Rendered as "—", never guessed. */
+  reversible: boolean | null;
 }
 
 export interface PipelineStage {
@@ -152,6 +186,17 @@ export interface World {
   evidence: Evidence[];
   recommended: boolean;
   notes: string[];
+  /**
+   * Whether `evidence` and `counterexample.hypothesis` hold real rows.
+   *
+   * The current HTTP API exposes per-world evidence *counts*, not the rows
+   * themselves. When this is false the UI says so in words rather than
+   * rendering empty or invented evidence — `evidenceCount` and
+   * `reproducedCounterexamples` stay live and authoritative either way.
+   */
+  evidenceDetailAvailable: boolean;
+  evidenceCount: number;
+  reproducedCounterexamples: number;
 }
 
 export interface ComparisonRanking {
@@ -200,7 +245,11 @@ export interface RunEvent {
   worldId?: string;
 }
 
+export type RunSource = "live" | "fixture";
+
 export interface Run {
+  /** Where this run's values came from. Live runs never borrow fixture data. */
+  source: RunSource;
   runId: string;
   title: string;
   status: RunStatus;
@@ -214,6 +263,11 @@ export interface Run {
   comparison: Comparison;
   approval: Approval;
   events: RunEvent[];
+  /** Present once reality has been re-read after a commit. */
+  realityCommitted: boolean;
+  commitStatus: string | null;
+  verificationStatus: string | null;
+  failureReason: string;
 }
 
 /** A row in the run sidebar. The current run plus finished history. */

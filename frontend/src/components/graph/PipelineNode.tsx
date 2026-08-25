@@ -46,9 +46,11 @@ export function PipelineNode({
       >
         {stage.label}
       </span>
-      <span className="font-mono text-[11px] tabular-nums text-fg-faint">
-        {stage.duration}
-      </span>
+      {stage.duration ? (
+        <span className="font-mono text-[11px] tabular-nums text-fg-faint">
+          {stage.duration}
+        </span>
+      ) : null}
     </button>
   );
 }

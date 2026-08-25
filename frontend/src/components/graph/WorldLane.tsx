@@ -18,6 +18,15 @@ import {
 } from "../run/StatusBadge";
 import { PipelineNode } from "./PipelineNode";
 
+/** What to say when the adversary's own words are not exposed by the API. */
+const CX_LABEL: Record<string, string> = {
+  REPRODUCED: "Counterexample proposed. Hypothesis text unavailable from current API.",
+  NOT_REPRODUCED:
+    "Counterexample proposed. Hypothesis text unavailable from current API.",
+  ERROR: "Proposed counterexample was rejected as malformed.",
+  NONE_PROPOSED: "No replayable counterexample proposed.",
+};
+
 export function WorldLane({
   world,
   selected,
@@ -98,7 +107,7 @@ export function WorldLane({
           {world.verdict}
         </span>
 
-        {world.verdict === "VETOED" ? (
+        {world.verdict === "VETOED" && world.verdictReason ? (
           <span className="text-[12px] text-fg-dim">{world.verdictReason}</span>
         ) : null}
 
@@ -130,9 +139,15 @@ export function WorldLane({
             </span>
             <AuthorityBadge authority="EXPLORATORY" />
           </div>
-          <p className="mt-0.5 text-[11px] leading-snug text-fg-dim italic">
-            &ldquo;{world.counterexample.hypothesis}&rdquo;
-          </p>
+          {world.counterexample.hypothesis ? (
+            <p className="mt-0.5 text-[11px] leading-snug text-fg-dim italic">
+              &ldquo;{world.counterexample.hypothesis}&rdquo;
+            </p>
+          ) : (
+            <p className="mt-0.5 text-[11px] leading-snug text-fg-faint">
+              {CX_LABEL[world.counterexample.status]}
+            </p>
+          )}
         </section>
 
         <section aria-label="BRANCHPOINT replay evidence" className="min-w-0">
@@ -143,24 +158,48 @@ export function WorldLane({
             <AuthorityBadge authority="VERIFIED" />
           </div>
           <div className="mt-0.5">
-            {shown.map((item) => (
-              <div
-                key={item.evidenceId}
-                className="flex items-baseline justify-between gap-3 font-mono text-[11px] leading-snug"
-              >
-                <span className="truncate text-fg-dim">{item.claim}</span>
-                <span
-                  className={item.outcome === "FAIL" ? "text-fail" : "text-ok"}
-                >
-                  {item.outcome}
-                </span>
-              </div>
-            ))}
-            {failing.length === 0 ? (
-              <p className="text-[11px] leading-snug text-fg-faint">
-                all {replay.length} declared invariants pass
-              </p>
-            ) : null}
+            {world.evidenceDetailAvailable ? (
+              <>
+                {shown.map((item) => (
+                  <div
+                    key={item.evidenceId}
+                    className="flex items-baseline justify-between gap-3 font-mono text-[11px] leading-snug"
+                  >
+                    <span className="truncate text-fg-dim">{item.claim}</span>
+                    <span
+                      className={item.outcome === "FAIL" ? "text-fail" : "text-ok"}
+                    >
+                      {item.outcome}
+                    </span>
+                  </div>
+                ))}
+                {failing.length === 0 ? (
+                  <p className="text-[11px] leading-snug text-fg-faint">
+                    all {replay.length} declared invariants pass
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              /* Counts are live and authoritative; the rows behind them are not
+                 exposed by the current API, so they are named as missing rather
+                 than rendered as empty or invented. */
+              <>
+                <div className="flex items-baseline justify-between gap-3 font-mono text-[11px] leading-snug">
+                  <span className="text-fg-dim">reproduced counterexamples</span>
+                  <span
+                    className={
+                      world.reproducedCounterexamples > 0 ? "text-fail" : "text-ok"
+                    }
+                  >
+                    {world.reproducedCounterexamples}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 font-mono text-[11px] leading-snug">
+                  <span className="text-fg-dim">evidence items</span>
+                  <span className="text-fg-dim">{world.evidenceCount}</span>
+                </div>
+              </>
+            )}
           </div>
         </section>
       </div>

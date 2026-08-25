@@ -29,6 +29,13 @@ const CHANNEL_TONE: Record<RunEvent["channel"], string> = {
 
 function EventsTab() {
   const { run, selectedWorldId, selectWorld } = useRunView();
+  if (run.events.length === 0) {
+    return (
+      <p className="px-2 font-mono text-[11px] text-fg-faint">
+        No events yet.
+      </p>
+    );
+  }
   return (
     <ul className="font-mono text-[11px] leading-[1.7]">
       {run.events.map((event) => {
@@ -73,6 +80,39 @@ function EvidenceTab() {
   const all = run.worlds.flatMap((world) =>
     world.evidence.map((item) => ({ world, item })),
   );
+  // Live runs carry counts, not rows: say which, rather than showing an empty
+  // table that reads as "this run produced no evidence".
+  if (all.length === 0) {
+    return (
+      <div className="px-2 font-mono text-[11px] text-fg-dim">
+        <p>Detailed evidence unavailable from current API.</p>
+        <table className="mt-2 w-full">
+          <thead>
+            <tr className="text-left text-fg-faint">
+              <th className="px-2 py-0.5 font-normal">world</th>
+              <th className="px-2 py-0.5 font-normal">evidence items</th>
+              <th className="px-2 py-0.5 font-normal">reproduced</th>
+            </tr>
+          </thead>
+          <tbody>
+            {run.worlds.map((world) => (
+              <tr key={world.worldId}>
+                <td className="px-2 py-0.5">{world.worldId}</td>
+                <td className="px-2 py-0.5">{world.evidenceCount}</td>
+                <td
+                  className={`px-2 py-0.5 ${
+                    world.reproducedCounterexamples > 0 ? "text-fail" : "text-ok"
+                  }`}
+                >
+                  {world.reproducedCounterexamples}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
   return (
     <table className="w-full font-mono text-[11px]">
       <thead>
@@ -109,18 +149,33 @@ function EvidenceTab() {
   );
 }
 
+/**
+ * Which TrueForge sessions a run bound, read from its own event timeline.
+ *
+ * The backend emits one `TRUEFORGE_SESSION_CREATED` event per binding, so this
+ * is real. Per-agent tool inventories and sandbox configuration are not exposed
+ * over HTTP and are therefore not claimed here.
+ */
 function AgentsTab() {
   const { run } = useRunView();
+  const sessions = run.events.filter((event) =>
+    event.message.includes("session "),
+  );
+  if (sessions.length === 0) {
+    return (
+      <p className="px-2 font-mono text-[11px] text-fg-faint">
+        No agent sessions bound yet.
+      </p>
+    );
+  }
   return (
     <ul className="space-y-0.5 px-2 font-mono text-[11px] text-fg-dim">
-      <li>PLANNER · sandbox off · 7 read-only tools</li>
-      {run.worlds.map((world) => (
-        <li key={world.worldId}>
-          DOPPELGÄNGER · {world.worldId} · sandbox{" "}
-          {world.sandbox.enabled ? "on" : "off"} · 8 read-only world tools
+      {sessions.map((event) => (
+        <li key={event.eventId}>
+          {event.message}
+          {event.worldId ? ` · ${event.worldId}` : ""}
         </li>
       ))}
-      <li>COMMIT_OPERATOR · sandbox off · 1 destructive tool, approval-gated</li>
     </ul>
   );
 }
@@ -128,27 +183,26 @@ function AgentsTab() {
 function McpTab() {
   return (
     <div className="px-2 font-mono text-[11px] text-fg-dim">
-      <p>branchpoint · remote · 17 tools</p>
       <p className="text-fg-faint">
-        13 readOnlyHint · 4 destructiveHint · destructive tools require approval
+        MCP server inventory is not exposed over the public API. BRANCHPOINT
+        registers its tools with TrueForge directly, and TrueForge is never
+        reachable from this page.
       </p>
     </div>
   );
 }
 
 function SandboxTab() {
-  const { run } = useRunView();
   return (
     <div className="px-2 font-mono text-[11px] text-fg-dim">
-      <p className="mb-1 text-fg-faint">
-        DOPPELGÄNGER only. Output is EXPLORATORY and never authoritative.
+      <p className="mb-1">
+        Sandbox activity is not exposed over the public API.
       </p>
-      {run.worlds.map((world) => (
-        <p key={world.worldId}>
-          {world.worldId} · {world.sandbox.sandboxId ?? "—"} ·{" "}
-          {world.sandbox.execCount} exec · {world.sandbox.status}
-        </p>
-      ))}
+      <p className="text-fg-faint">
+        The boundary it sits behind is unchanged: DOPPELGÄNGER sandbox output is
+        EXPLORATORY and can never veto a world. Only BRANCHPOINT&rsquo;s own
+        replay produces the VERIFIED evidence a veto requires.
+      </p>
     </div>
   );
 }

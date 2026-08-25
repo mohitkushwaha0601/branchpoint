@@ -11,14 +11,17 @@ import { StatusBadge, runStatusDescriptor } from "./StatusBadge";
 function FactList({
   heading,
   facts,
+  note,
 }: {
   heading: string;
   facts: { label: string; value: string }[];
+  note?: string;
 }) {
   return (
     <section aria-label={heading} className="min-w-0 flex-1">
-      <h3 className="mb-1.5 font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint">
+      <h3 className="mb-1.5 flex flex-wrap items-baseline gap-x-2 font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint">
         {heading}
+        {note ? <span className="font-normal tracking-normal">— {note}</span> : null}
       </h3>
       <dl className="divide-y divide-edge-muted border-t border-edge-muted">
         {facts.map((fact) => (
@@ -40,6 +43,10 @@ function FactList({
 export function RunHeader({ run }: { run: Run }) {
   const vetoed = run.worlds.filter((w) => w.verdict === "VETOED").length;
   const survivors = run.worlds.filter((w) => w.verdict === "SURVIVED").length;
+
+  // Read live from the reality endpoint. Saying "UNCHANGED" is a claim, so it
+  // is made only while the run has committed nothing.
+  const realityNote = run.realityCommitted ? "COMMITTED" : "UNCHANGED";
 
   return (
     <div className="border-b border-edge px-5 py-4">
@@ -72,15 +79,26 @@ export function RunHeader({ run }: { run: Run }) {
         </span>
       </p>
 
+      {run.reality.facts.length === 0 ? (
+        <p className="mt-3 text-[12px] text-fg-faint">
+          Current reality unavailable.
+        </p>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap gap-x-10 gap-y-4">
         <FactList
-          heading="INCIDENT"
+          heading="OBSERVED METRICS"
           facts={run.incident.metrics.map((m) => ({
             label: m.label,
             value: m.value,
           }))}
+          note={realityNote}
         />
-        <FactList heading="REALITY" facts={run.reality.facts} />
+        <FactList
+          heading="CURRENT REALITY"
+          facts={run.reality.facts}
+          note={realityNote}
+        />
       </div>
     </div>
   );

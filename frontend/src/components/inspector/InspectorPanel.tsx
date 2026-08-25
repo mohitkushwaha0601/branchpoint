@@ -10,6 +10,19 @@ import { WorldInspector } from "./WorldInspector";
 
 function InspectorBody() {
   const { run, selectedWorld, selectedStageId } = useRunView();
+
+  // A run is readable the moment it is created, long before it has forked.
+  if (selectedWorld === null) {
+    return (
+      <div className="px-4 py-4">
+        <p className="text-[12px] text-fg-dim">Waiting for worlds…</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-fg-faint">
+          Counterfactual worlds appear here as BRANCHPOINT forks them.
+        </p>
+      </div>
+    );
+  }
+
   const selectedStage =
     selectedWorld.pipeline.find((stage) => stage.id === selectedStageId) ?? null;
   const ranking = run.comparison.rankings.find(
@@ -17,10 +30,12 @@ function InspectorBody() {
   );
 
   const comparatorNote = selectedWorld.recommended
-    ? run.comparison.summary
+    ? run.comparison.summary || "Ranked first by the deterministic comparator."
     : ranking
       ? `Ranked ${ranking.rank} by deterministic comparator. ${ranking.reason}`
-      : "Disqualified by the comparator: a counterexample was reproduced against this world.";
+      : run.comparison.rejectedWorldIds.includes(selectedWorld.worldId)
+        ? "Disqualified by the comparator: a counterexample was reproduced against this world."
+        : "Not yet compared.";
 
   return (
     <WorldInspector

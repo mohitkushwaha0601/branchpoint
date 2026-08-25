@@ -13,6 +13,11 @@ import {
 } from "../run/StatusBadge";
 import { EvidenceInspector } from "./EvidenceInspector";
 
+/** Empty means the API did not carry the value, and says so on screen. */
+function dash(value: string): string {
+  return value === "" ? "—" : value;
+}
+
 function Section({
   heading,
   children,
@@ -103,39 +108,59 @@ export function WorldInspector({
       ) : null}
 
       <Section heading="ACTION">
-        <p className="font-mono text-[12px] text-fg">
-          {world.action.parameter}
-        </p>
-        <Transition
-          label={world.action.name}
-          from={world.action.from}
-          to={world.action.to}
-        />
-        <dl className="mt-1 space-y-0.5">
+        <p className="text-[12px] text-fg">{world.action.name}</p>
+        {world.action.parameter ? (
+          <Transition
+            label={world.action.parameter}
+            from={world.action.from}
+            to={world.action.to}
+          />
+        ) : (
+          <p className="mt-1 text-[11px] leading-relaxed text-fg-faint">
+            Parameter values are not exposed per world by the current API.
+          </p>
+        )}
+        <dl className="mt-2 space-y-0.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-[11px] text-fg-faint">Action id</dt>
+            <dd className="font-mono text-[11px] text-fg-dim">
+              {dash(world.action.actionId)}
+            </dd>
+          </div>
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-[11px] text-fg-faint">Fingerprint</dt>
             <dd className="font-mono text-[11px] text-fg-dim">
-              {world.action.fingerprint}
+              {dash(world.action.fingerprint)}
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-[11px] text-fg-faint">Reversible</dt>
             <dd className="font-mono text-[11px] text-fg-dim">
-              {world.action.reversible ? "yes" : "no"}
+              {world.action.reversible === null
+                ? "—"
+                : world.action.reversible
+                  ? "yes"
+                  : "no"}
             </dd>
           </div>
         </dl>
       </Section>
 
       <Section heading="RESULT">
-        {world.outcome.results.map((result) => (
-          <Transition
-            key={result.label}
-            label={result.label}
-            from={result.from ?? "—"}
-            to={result.to ?? result.value}
-          />
-        ))}
+        {world.outcome.results.length > 0 ? (
+          world.outcome.results.map((result) => (
+            <Transition
+              key={result.label}
+              label={result.label}
+              from={result.from ?? "—"}
+              to={result.to ?? result.value}
+            />
+          ))
+        ) : (
+          <p className="text-[11px] leading-relaxed text-fg-faint">
+            Per-world before/after metrics are not exposed by the current API.
+          </p>
+        )}
         <dl className="mt-1.5 space-y-0.5 border-t border-edge-muted pt-1.5">
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-[11px] text-fg-faint">Goal achieved</dt>
@@ -163,22 +188,35 @@ export function WorldInspector({
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-[11px] text-fg-faint">Sandbox</dt>
             <dd className="font-mono text-[11px] text-fg-dim">
-              {world.sandbox.status}
+              {world.evidenceDetailAvailable ? world.sandbox.status : "—"}
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-[11px] text-fg-faint">
               Reproduced counterexamples
             </dt>
+            <dd
+              className={`font-mono text-[11px] ${
+                world.reproducedCounterexamples > 0 ? "text-fail" : "text-fg-dim"
+              }`}
+            >
+              {world.reproducedCounterexamples}
+            </dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-[11px] text-fg-faint">Evidence items</dt>
             <dd className="font-mono text-[11px] text-fg-dim">
-              {world.counterexample.status === "REPRODUCED" ? 1 : 0}
+              {world.evidenceCount}
             </dd>
           </div>
         </dl>
       </Section>
 
       <div className="border-t border-edge-muted px-4 py-3">
-        <EvidenceInspector evidence={world.evidence} />
+        <EvidenceInspector
+          evidence={world.evidence}
+          detailAvailable={world.evidenceDetailAvailable}
+        />
       </div>
 
       <footer className="mt-auto border-t border-edge-muted px-4 py-3">

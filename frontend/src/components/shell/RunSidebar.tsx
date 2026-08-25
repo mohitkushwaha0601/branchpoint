@@ -6,6 +6,7 @@
 import { NavLink } from "react-router-dom";
 
 import type { RunSummary } from "../../types/run";
+import { StartRunButton } from "../run/StartRunButton";
 import { StatusIcon, runStatusDescriptor } from "../run/StatusBadge";
 
 function RunRow({ run, current }: { run: RunSummary; current: boolean }) {
@@ -45,30 +46,35 @@ export function RunSidebar({
   runs: RunSummary[];
   currentRunId?: string;
 }) {
-  const [current, ...history] = runs;
-
   return (
     <aside
       aria-label="Runs"
       className="hidden w-[var(--sidebar-width)] shrink-0 flex-col overflow-y-auto border-r border-edge bg-surface sidebar:flex"
     >
-      <h2 className="px-3 pt-3 pb-1.5 font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint">
-        RUNS
-      </h2>
-      {current ? (
-        <RunRow run={current} current={current.runId === currentRunId} />
-      ) : null}
+      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+        <h2 className="font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint">
+          RUNS
+        </h2>
+      </div>
+      <div className="px-3 pb-3">
+        <StartRunButton compact />
+      </div>
 
-      <h2 className="mt-3 border-t border-edge-muted px-3 pt-3 pb-1.5 font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint">
-        HISTORY
-      </h2>
-      {history.map((run) => (
-        <RunRow
-          key={run.runId}
-          run={run}
-          current={run.runId === currentRunId}
-        />
-      ))}
+      {runs.length === 0 ? (
+        <p className="border-t border-edge-muted px-3 py-3 text-[12px] text-fg-faint">
+          No runs yet.
+        </p>
+      ) : (
+        <div className="border-t border-edge-muted">
+          {runs.map((run) => (
+            <RunRow
+              key={run.runId}
+              run={run}
+              current={run.runId === currentRunId}
+            />
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

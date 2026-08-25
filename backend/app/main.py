@@ -4,7 +4,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.dependencies import get_background_runner
 from app.api.router import api_router
 from app.core.config import APP_NAME, APP_VERSION, get_settings
 from app.core.logging import configure_logging
@@ -25,12 +27,34 @@ mcp_app = mcp_server.streamable_http_app(
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Run the MCP session manager for the lifetime of the FastAPI process."""
+    """Run the MCP session manager for the lifetime of the FastAPI process.
+
+    In-flight agent-run drives are cancelled on the way out rather than left to
+    be torn down by loop shutdown, so their cancellation is observed like any
+    other task outcome.
+    """
     async with mcp_server.session_manager.run():
-        yield
+        try:
+            yield
+        finally:
+            await get_background_runner().cancel_all()
 
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
+
+# Only installed when an operator names exact origins. Local development uses
+# the Vite proxy instead, so the browser stays same-origin and needs none of
+# this. Credentials are never allowed: BRANCHPOINT holds no browser session.
+_cors_origins = settings.resolve_cors_origins()
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(_cors_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["content-type"],
+    )
+
 app.include_router(api_router)
 # Mounted last and at root: FastAPI/Starlette match the explicit routes above
 # first, so this only ever handles "/mcp" (and anything else the MCP sub-app

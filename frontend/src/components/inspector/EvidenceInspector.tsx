@@ -28,9 +28,39 @@ function EvidenceRow({ item }: { item: Evidence }) {
   );
 }
 
-export function EvidenceInspector({ evidence }: { evidence: Evidence[] }) {
+export function EvidenceInspector({
+  evidence,
+  detailAvailable = true,
+}: {
+  evidence: Evidence[];
+  /**
+   * Whether `evidence` holds real rows. The current HTTP API exposes per-world
+   * counts but not the rows themselves; when that is the case the panel says so
+   * rather than showing an empty list that reads like "no evidence exists".
+   */
+  detailAvailable?: boolean;
+}) {
   const exploratory = evidence.filter((i) => i.authority === "EXPLORATORY");
   const verified = evidence.filter((i) => i.authority === "VERIFIED");
+
+  if (!detailAvailable) {
+    return (
+      <div className="space-y-3">
+        <h4 className="font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint">
+          EVIDENCE
+        </h4>
+        <p className="text-[11px] leading-relaxed text-fg-dim">
+          Detailed evidence unavailable from current API.
+        </p>
+        <p className="text-[11px] leading-relaxed text-fg-faint">
+          The counts above are live and authoritative. The authority boundary is
+          unchanged either way: only BRANCHPOINT&rsquo;s own replay can reproduce
+          a counterexample, and nothing the DOPPELGÄNGER produced in its sandbox
+          can.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

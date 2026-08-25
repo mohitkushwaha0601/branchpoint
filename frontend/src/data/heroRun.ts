@@ -1,10 +1,11 @@
 /**
- * The hero run, as typed mock data.
+ * The hero run, as a typed fixture.
  *
- * Phase 4.1 has no backend integration: this module is the *only* place the
- * scenario is written down. Components read it through props, so swapping in a
- * real API response later is a change here and in the loader, not a sweep
- * through the component tree.
+ * **Not part of the live path.** Since Phase 4.2 the app renders runs adapted
+ * from the real backend; this module exists so tests and the offline demo route
+ * have a complete, stable scenario to render. It is reachable only through
+ * `/demo/hero`, and `Run.source` marks anything built from it as `"fixture"` so
+ * a live run can never quietly inherit a value from here.
  */
 
 import type { Run, RunSummary, World } from "../types/run";
@@ -109,6 +110,9 @@ const worldAlpha: World = {
   notes: [
     "Goal achieved, but the rollback breaks records written by the newer schema.",
   ],
+  evidenceDetailAvailable: true,
+  evidenceCount: 3,
+  reproducedCounterexamples: 1,
 };
 
 const worldBeta: World = {
@@ -235,6 +239,9 @@ const worldBeta: World = {
   ],
   recommended: true,
   notes: ["All declared invariants pass."],
+  evidenceDetailAvailable: true,
+  evidenceCount: 6,
+  reproducedCounterexamples: 0,
 };
 
 const worldGamma: World = {
@@ -343,9 +350,13 @@ const worldGamma: World = {
   ],
   recommended: false,
   notes: ["Goal not fully achieved.", "Extra cost."],
+  evidenceDetailAvailable: true,
+  evidenceCount: 4,
+  reproducedCounterexamples: 0,
 };
 
 export const heroRun: Run = {
+  source: "fixture",
   runId: "run_dbfa98c87f06",
   title: "Checkout Regression",
   status: "AWAITING_APPROVAL",
@@ -413,6 +424,10 @@ export const heroRun: Run = {
       { label: "Action fingerprint bound", satisfied: true },
     ],
   },
+  realityCommitted: false,
+  commitStatus: null,
+  verificationStatus: null,
+  failureReason: "",
   events: [
     {
       eventId: "evt_01",

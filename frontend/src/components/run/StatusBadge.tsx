@@ -51,13 +51,28 @@ interface Descriptor {
   label: string;
 }
 
+const RUNNING = (label: string): Descriptor => ({
+  tone: "run",
+  Icon: Loader,
+  label,
+});
+
 const RUN_STATUS: Record<RunStatus, Descriptor> = {
-  RUNNING: { tone: "run", Icon: Loader, label: "RUNNING" },
+  CREATED: { tone: "muted", Icon: CircleDashed, label: "CREATED" },
+  OBSERVING: RUNNING("OBSERVING"),
+  PLANNING: RUNNING("PLANNING"),
+  FORKING: RUNNING("FORKING"),
+  EXECUTING_WORLDS: RUNNING("EXECUTING WORLDS"),
+  ADVERSARIAL_TESTING: RUNNING("ADVERSARIAL TESTING"),
+  COMPARING: RUNNING("COMPARING"),
   AWAITING_APPROVAL: {
     tone: "gate",
     Icon: Diamond,
     label: "AWAITING APPROVAL",
   },
+  APPROVED: { tone: "gate", Icon: Check, label: "APPROVED" },
+  COMMITTING: RUNNING("COMMITTING"),
+  VERIFYING: RUNNING("VERIFYING"),
   SUCCEEDED: { tone: "ok", Icon: Check, label: "SUCCEEDED" },
   REJECTED: { tone: "fail", Icon: X, label: "REJECTED" },
   FAILED: { tone: "fail", Icon: AlertTriangle, label: "FAILED" },
@@ -67,6 +82,7 @@ const VERDICT: Record<WorldVerdict, Descriptor> = {
   SURVIVED: { tone: "ok", Icon: Check, label: "SURVIVED" },
   VETOED: { tone: "fail", Icon: X, label: "VETOED" },
   INCONCLUSIVE: { tone: "warn", Icon: AlertTriangle, label: "INCONCLUSIVE" },
+  PENDING: { tone: "muted", Icon: CircleDashed, label: "PENDING" },
 };
 
 const PIPELINE: Record<PipelineStatus, Descriptor> = {

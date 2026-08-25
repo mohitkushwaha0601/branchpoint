@@ -14,12 +14,16 @@ take a single world each, so this can be parallelised later without touching
 any contract.
 """
 
+import logging
+
 from app.application.orchestration.orchestrator import BranchpointOrchestrator
 from app.domain.events import RunEvent, RunEventType
 from app.domain.incidents.models import Incident
 from app.domain.primitives import ScalarValue, new_id, utc_now
 from app.domain.runs.models import BranchpointRun
 from app.infrastructure.trueforge.sessions import InMemorySessionBindingStore
+
+logger = logging.getLogger(__name__)
 
 
 class AgentRunService:
@@ -36,6 +40,15 @@ class AgentRunService:
         self._events = events
         self._bindings = bindings
 
+    async def create_run(self, incident: Incident) -> BranchpointRun:
+        """Open the run and return immediately, before any agent work.
+
+        Split out of :meth:`drive_to_approval` so an HTTP caller can be handed a
+        run id in milliseconds and start watching the timeline, while the
+        expensive pipeline runs against **this same run** in the background.
+        """
+        return await self._orchestrator.create_run(incident)
+
     async def drive_to_approval(self, incident: Incident) -> BranchpointRun:
         """Create a run and drive it to the human approval gate.
 
@@ -43,10 +56,46 @@ class AgentRunService:
         reality has changed when this returns: committing requires a separate,
         human-approved destructive tool call.
         """
-        run = await self._orchestrator.create_run(incident)
-        await self._emit(run.run_id, RunEventType.PLANNER_STARTED, "TrueForge planner starting")
+        run = await self.create_run(incident)
+        return await self.drive(run.run_id)
 
-        run = await self._orchestrator.observe(run.run_id)
+    async def drive_safely(self, run_id: str) -> None:
+        """Drive ``run_id``, converting any failure into that run's own state.
+
+        This is what the background runner executes. A pipeline exception must
+        end up as a ``FAILED`` run a client can see, never as a task-log entry
+        that leaves Mission Control watching a run that stopped moving.
+
+        Some orchestrator steps already fail the run themselves before
+        re-raising, so the run may be terminal by the time we get here; failing
+        it twice would raise ``IllegalTransitionError``, so its recorded outcome
+        is left alone.
+        """
+        try:
+            await self.drive(run_id)
+        except Exception as exc:
+            logger.warning("run %s failed during background drive: %s", run_id, exc)
+            await self._fail_run(run_id, f"agent run failed: {exc}")
+
+    async def _fail_run(self, run_id: str, reason: str) -> None:
+        """Record a terminal failure against a run that is not already terminal."""
+        run = await self._orchestrator.repository.get(run_id)
+        if run is None or run.is_terminal:
+            return
+        failed = run.fail(reason)
+        await self._orchestrator.repository.save(failed)
+        await self._emit(run_id, RunEventType.RUN_FAILED, failed.failure_reason)
+
+    async def drive(self, run_id: str) -> BranchpointRun:
+        """Drive an already-created run to the human approval gate.
+
+        Every safety decision still belongs to the Phase 1 orchestrator; this
+        only sequences its steps and emits the richer Phase 3 timeline around
+        them.
+        """
+        await self._emit(run_id, RunEventType.PLANNER_STARTED, "TrueForge planner starting")
+
+        run = await self._orchestrator.observe(run_id)
         run = await self._orchestrator.plan(run.run_id)
         await self._emit_session_bindings(run.run_id)
 

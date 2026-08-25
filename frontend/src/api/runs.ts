@@ -1,0 +1,91 @@
+/** Run endpoints. Every call takes an `AbortSignal` so a view can cancel it. */
+
+import { request } from "./client";
+import type {
+  AcceptedRunDto,
+  ApprovalDecisionDto,
+  ApprovalRequest,
+  ComparisonDetailDto,
+  EventListDto,
+  RunDto,
+  RunListDto,
+  StartRunRequest,
+  WorldsDto,
+} from "./types";
+
+/** Accepted with `202` as soon as the run exists; the pipeline runs after. */
+export function startRun(
+  body: StartRunRequest,
+  signal?: AbortSignal,
+): Promise<AcceptedRunDto> {
+  return request<AcceptedRunDto>("/api/v1/agent-runs", {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
+export function listRuns(signal?: AbortSignal): Promise<RunListDto> {
+  return request<RunListDto>("/api/v1/runs", { signal });
+}
+
+/**
+ * The authoritative view of a run: status, worlds, comparison, approval
+ * binding, commit and verification outcome, all in one response. Everything
+ * else below is detail layered on top of it, never a second source for the
+ * same fact.
+ */
+export function getRun(runId: string, signal?: AbortSignal): Promise<RunDto> {
+  return request<RunDto>(`/api/v1/runs/${encodeURIComponent(runId)}`, { signal });
+}
+
+export function getRunEvents(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<EventListDto> {
+  return request<EventListDto>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/events`,
+    { signal },
+  );
+}
+
+/** Per-world measured outcome — richer than the summary inside `getRun`. */
+export function getRunWorlds(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<WorldsDto> {
+  return request<WorldsDto>(`/api/v1/runs/${encodeURIComponent(runId)}/worlds`, {
+    signal,
+  });
+}
+
+/** Deterministic rankings. `409` until the run has been compared. */
+export function getRunComparison(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ComparisonDetailDto> {
+  return request<ComparisonDetailDto>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/comparison`,
+    { signal },
+  );
+}
+
+/**
+ * Record a human decision.
+ *
+ * The body carries no action content — see {@link ApprovalRequest}. The
+ * `expected_*` values are read back from the run's own approval binding and
+ * sent as confirmation; a mismatch is a `409` the human must resolve, never an
+ * instruction to commit something else. Capability issuance and the commit
+ * itself belong to BRANCHPOINT and are never touched from here.
+ */
+export function approveRun(
+  runId: string,
+  body: ApprovalRequest,
+  signal?: AbortSignal,
+): Promise<ApprovalDecisionDto> {
+  return request<ApprovalDecisionDto>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/approval`,
+    { method: "POST", body, signal },
+  );
+}

@@ -5,11 +5,11 @@
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { inspector, renderRun } from "./renderRun";
+import { inspector, renderFixture } from "./renderRun";
 
 describe("approval gate", () => {
   it("renders the checkpoint, its checks, and the exact bound action", () => {
-    renderRun();
+    renderFixture();
 
     const gate = screen
       .getByRole("heading", { name: "MANUAL APPROVAL REQUIRED" })
@@ -28,45 +28,38 @@ describe("approval gate", () => {
       expect(panel.getByText(check)).toBeInTheDocument();
     }
     expect(panel.getByText("3d7a1e05c94b2f6d")).toBeInTheDocument();
-    expect(panel.getByRole("button", { name: "Reject" })).toBeInTheDocument();
     expect(
       panel.getByRole("button", { name: "Approve & Commit" }),
     ).toBeInTheDocument();
   });
 
-  it("confirms an approval without claiming anything was committed", async () => {
-    const { user } = renderRun();
+  it("names the exact binding a human is being asked to confirm", () => {
+    renderFixture();
 
-    await user.click(screen.getByRole("button", { name: "Approve & Commit" }));
-
-    const status = screen.getByRole("status");
+    const gate = within(
+      screen.getByRole("heading", { name: "MANUAL APPROVAL REQUIRED" }).closest("section")!,
+    );
+    expect(gate.getByText("world_beta")).toBeInTheDocument();
+    expect(gate.getByText("action_b8e2")).toBeInTheDocument();
+    expect(gate.getByText("3d7a1e05c94b2f6d")).toBeInTheDocument();
     expect(
-      within(status).getByText(/Approval recorded for Disable Pricing V2/),
+      gate.getByText(/commits the action they identify and nothing else/),
     ).toBeInTheDocument();
-    expect(
-      within(status).getByText(/no commit was issued and reality is unchanged/),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Approve & Commit" }),
-    ).not.toBeInTheDocument();
   });
 
-  it("confirms a rejection and can be undone", async () => {
-    const { user } = renderRun();
+  it("does not offer a reject the backend cannot honour", () => {
+    renderFixture();
 
-    await user.click(screen.getByRole("button", { name: "Reject" }));
+    expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
     expect(
-      within(screen.getByRole("status")).getByText(/Rejection recorded/),
+      screen.getByText(/Rejection is not exposed by the current API/),
     ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Undo" }));
-    expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
   });
 });
 
 describe("event drawer", () => {
   it("starts collapsed and toggles open and shut", async () => {
-    const { user } = renderRun();
+    const { user } = renderFixture();
 
     const toggle = screen.getByRole("button", { name: /SHOW/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -83,7 +76,7 @@ describe("event drawer", () => {
   });
 
   it("lists the run's events with monospace timestamps", async () => {
-    const { user } = renderRun();
+    const { user } = renderFixture();
     await user.click(screen.getByRole("button", { name: /SHOW/ }));
 
     const panel = screen.getByRole("tabpanel", { name: "Events" });
@@ -95,7 +88,7 @@ describe("event drawer", () => {
   });
 
   it("selects the related world when an event is activated", async () => {
-    const { user } = renderRun();
+    const { user } = renderFixture();
     await user.click(screen.getByRole("button", { name: /SHOW/ }));
 
     const panel = screen.getByRole("tabpanel", { name: "Events" });
@@ -108,14 +101,16 @@ describe("event drawer", () => {
     ).toBeInTheDocument();
   });
 
-  it("switches streams and reports the sandbox as exploratory only", async () => {
-    const { user } = renderRun();
+  it("switches streams and keeps the sandbox authority boundary explicit", async () => {
+    const { user } = renderFixture();
 
     await user.click(screen.getByRole("tab", { name: "Sandbox" }));
     const panel = screen.getByRole("tabpanel", { name: "Sandbox" });
     expect(
-      within(panel).getByText(/EXPLORATORY and never authoritative/),
+      within(panel).getByText(/EXPLORATORY and can never veto a world/),
     ).toBeInTheDocument();
-    expect(within(panel).getByText(/sbx_4a19c72e/)).toBeInTheDocument();
+    expect(
+      within(panel).getByText(/only BRANCHPOINT/i),
+    ).toBeInTheDocument();
   });
 });

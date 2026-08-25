@@ -126,6 +126,30 @@ export function BranchGraph() {
 
   const activeWorldId = hoveredWorldId ?? selectedWorldId;
   const worldById = (id: string) => run.worlds.find((w) => w.worldId === id);
+  const recommended = worldById(run.comparison.recommendedWorldId ?? "");
+
+  // A run is watchable from the moment it is created. Before it forks there is
+  // no graph to draw, so the trunk says what it is waiting for instead of
+  // rendering an empty fan.
+  if (run.worlds.length === 0) {
+    return (
+      <div className="px-5 py-5">
+        <h2 className="mb-3 flex items-center gap-2 font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint">
+          <GitFork className="h-3.5 w-3.5" aria-hidden="true" />
+          COUNTERFACTUAL BRANCHES
+        </h2>
+        <div className="flex items-center gap-3 rounded-panel border border-edge bg-surface px-4 py-3">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-run bp-pulse" aria-hidden="true" />
+          <p className="text-[12px] text-fg-dim">
+            Waiting for worlds…
+            <span className="ml-2 text-fg-faint">
+              branches appear as BRANCHPOINT forks them.
+            </span>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-5 py-5">
@@ -209,19 +233,29 @@ export function BranchGraph() {
 
         <div className="mt-4 pl-[92px]">
           <div ref={trunkRef} className="flex w-fit flex-col gap-2">
-            <TrunkNode
-              icon={<ListOrdered className="h-3.5 w-3.5" aria-hidden="true" />}
-              label="COMPARATOR"
-              detail={run.comparison.summary}
-            />
-            <TrunkNode
-              icon={<Star className="h-3.5 w-3.5" aria-hidden="true" />}
-              label="RECOMMENDED"
-              detail={
-                worldById(run.comparison.recommendedWorldId ?? "")?.name ?? "—"
-              }
-              emphasis
-            />
+            {recommended === undefined ? (
+              <span className="inline-flex w-fit items-center gap-2.5 rounded-md border border-edge bg-surface px-2.5 py-1.5 text-fg-faint">
+                <ListOrdered className="h-3.5 w-3.5" aria-hidden="true" />
+                <span className="font-mono text-[10px] font-semibold tracking-[0.1em]">
+                  COMPARATOR
+                </span>
+                <span className="text-[12px]">Waiting for comparison…</span>
+              </span>
+            ) : (
+              <>
+                <TrunkNode
+                  icon={<ListOrdered className="h-3.5 w-3.5" aria-hidden="true" />}
+                  label="COMPARATOR"
+                  detail={run.comparison.summary || "Deterministic ranking complete."}
+                />
+                <TrunkNode
+                  icon={<Star className="h-3.5 w-3.5" aria-hidden="true" />}
+                  label="RECOMMENDED"
+                  detail={recommended.name}
+                  emphasis
+                />
+              </>
+            )}
           </div>
         </div>
       </div>
