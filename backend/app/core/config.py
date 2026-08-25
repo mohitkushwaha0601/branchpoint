@@ -35,6 +35,23 @@ class Settings(BaseSettings):
     Setting ``BRANCHPOINT_MCP_INSECURE_LOCALHOST=true`` turns it off — an
     explicit opt-in, never the default.
     """
+    trueforge_base_url: str = "http://localhost:8790"
+    """Base URL of the TrueForge harness (``BRANCHPOINT_TRUEFORGE_BASE_URL``)."""
+    trueforge_model: str = ""
+    """Model FQN TrueForge should use, e.g. ``anthropic/claude-sonnet-4-5``.
+
+    Empty by default: BRANCHPOINT never hardwires a provider. Set
+    ``BRANCHPOINT_TRUEFORGE_MODEL`` to whichever model the operator configured
+    in TrueForge. The provider's API key lives in TrueForge, never here — this
+    backend holds no model credentials.
+    """
+    trueforge_mcp_server_name: str = "branchpoint"
+    """Name BRANCHPOINT is registered under in TrueForge's MCP settings."""
+    trueforge_mcp_url: str = "http://127.0.0.1:8000/mcp"
+    """URL TrueForge should reach this backend's MCP server on."""
+    trueforge_sandbox_enabled: bool = True
+    """Whether DOPPELGÄNGER sessions get a TrueForge sandbox for exploration."""
+
     demo_scenario_path: str | None = None
     """Override path to the hero scenario fixture (``BRANCHPOINT_DEMO_SCENARIO_PATH``).
 

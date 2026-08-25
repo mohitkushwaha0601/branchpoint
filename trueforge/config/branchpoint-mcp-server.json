@@ -1,0 +1,9 @@
+{
+  "_comment": "Body for PUT /api/v1/settings/mcp-servers on TrueForge 0.1.4. Registers BRANCHPOINT as a remote MCP server.",
+  "manifest": {
+    "type": "remote",
+    "name": "branchpoint",
+    "url": "http://127.0.0.1:8000/mcp",
+    "description": "BRANCHPOINT counterfactual safety layer: read demo production reality, inspect counterfactual worlds, reproduce structured counterexamples, and (only with human approval) commit the recommended world to reality."
+  }
+}
