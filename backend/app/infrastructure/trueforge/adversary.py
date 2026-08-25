@@ -2,10 +2,11 @@
 
 For each world, a TrueForge session is created and instructed to delegate the
 attack to a **subagent** — TrueForge's real ``dynamic_sub_agents`` mechanism —
-which investigates with read-only world tools and a sandbox. Whatever the
-subagent finds is exploratory only. The single authoritative step is
-BRANCHPOINT replaying a typed :class:`CounterexampleSpec` against the world's
-own isolated snapshot.
+which investigates with read-only world tools and, when
+``BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED`` is set, a TrueForge sandbox it may
+run code in. Whatever the subagent finds — in the sandbox or out of it — is
+exploratory only. The single authoritative step is BRANCHPOINT replaying a
+typed :class:`CounterexampleSpec` against the world's own isolated snapshot.
 
 Fail-closed is the rule throughout: TrueForge unavailable, a model timeout, a
 sandbox failure, or malformed output all raise, and the Phase 1 orchestrator
@@ -47,6 +48,14 @@ from app.infrastructure.trueforge.sessions import (
     SessionPurpose,
     SessionStatus,
 )
+
+#: Provenance stamped on everything that originates inside the adversary's own
+#: TrueForge session — sandbox ``exec``, sandbox files, sandbox scripts,
+#: subagent prose, model prose. Evidence carrying this source is always
+#: ``machine_verifiable=False``: it is context for a human, never proof.
+#: Machine-verifiable failing evidence comes from BRANCHPOINT's replay engine
+#: alone, under its own source.
+SANDBOX_EVIDENCE_SOURCE = "trueforge-doppelganger"
 
 #: World-inspection tools the DOPPELGÄNGER may use. All read-only; none can
 #: reach reality, and none announces the hidden defect.
@@ -123,7 +132,7 @@ class TrueForgeAdversarialTester:
         model: str,
         bindings: InMemorySessionBindingStore,
         mcp_server_name: str = "branchpoint",
-        sandbox_enabled: bool = True,
+        sandbox_enabled: bool = False,
     ) -> None:
         self._client = client
         self._engine = engine
@@ -135,15 +144,24 @@ class TrueForgeAdversarialTester:
     def agent_spec(self, run_id: str, world_id: str) -> dict:
         """Build the inline TrueForge agent spec for one world's adversary.
 
-        Subagents are enabled (the DOPPELGÄNGER is delegated to one) and a
-        sandbox is provided for exploration. Only read-only world-inspection
-        tools are exposed, by literal name — no mutation tool is reachable from
-        this session at all, so the Code Mode destructive-classification issue
-        cannot apply to it.
+        Subagents are enabled (the DOPPELGÄNGER is delegated to one). A sandbox
+        is provided for exploration only when ``sandbox_enabled`` is set — this
+        is the *only* role that may ever have one, and it buys the session
+        TrueForge's built-in ``exec`` capability, nothing more. Enabling it
+        changes no tool exposure: only read-only world-inspection tools are
+        exposed, by literal name, so no mutation tool is reachable from this
+        session whether the sandbox is on or off, and the Code Mode
+        destructive-classification issue cannot apply to it either way.
+
+        Nothing that runs in the sandbox is authoritative. It cannot reach
+        reality, cannot reach the replay engine, and its output is recorded
+        under :data:`SANDBOX_EVIDENCE_SOURCE` with ``machine_verifiable=False``.
         """
         return {
             "model": {"name": self._model},
-            "instructions": doppelganger_instructions(run_id, world_id),
+            "instructions": doppelganger_instructions(
+                run_id, world_id, sandbox_enabled=self._sandbox_enabled
+            ),
             "mcp_servers": [
                 {
                     "name": self._mcp_server_name,
@@ -158,6 +176,11 @@ class TrueForgeAdversarialTester:
                 "iteration_limit": 60,
             },
         }
+
+    @property
+    def sandbox_enabled(self) -> bool:
+        """Whether this adversary's sessions are given a TrueForge sandbox."""
+        return self._sandbox_enabled
 
     async def attack(self, world: World) -> AdversarialReport:
         """Attack ``world`` via a TrueForge subagent, then replay its finding.
@@ -260,6 +283,11 @@ class TrueForgeAdversarialTester:
 
     def _attack_message(self, world: World) -> str:
         action = world.candidate_action
+        explore = (
+            "use its sandbox to test its hypothesis against the data it gathers,"
+            if self._sandbox_enabled
+            else "reason about its hypothesis from the data it gathers,"
+        )
         return (
             f"Attack counterfactual world `{world.world_id}` of run `{world.run_id}`.\n\n"
             f"It applied this proposed action: {action.name} "
@@ -269,9 +297,8 @@ class TrueForgeAdversarialTester:
             f'to call every world tool with run_id="{world.run_id}" and '
             f'world_id="{world.world_id}" — they are keyed on both, and no other '
             "values are valid. It should inspect the world with the read-only tools, "
-            "use its sandbox to test its hypothesis against the data it gathers, and "
-            "report back. Then reply with the single JSON object described in your "
-            "instructions."
+            f"{explore} and report back. Then reply with the single JSON object "
+            "described in your instructions."
         )
 
     @staticmethod
@@ -318,10 +345,15 @@ class TrueForgeAdversarialTester:
         return spec
 
     def _sandbox_evidence(self, world: World, result: TurnResult) -> tuple[Evidence, ...]:
-        """Record that sandbox exploration happened, as non-verifiable context.
+        """Record that sandbox/subagent exploration happened, as non-verifiable context.
 
-        Sandbox artifacts are explicitly ``machine_verifiable=False``: they are
-        useful provenance for a human, and they can never contribute to a veto.
+        This is the *only* place anything the adversary's session produced
+        becomes ``Evidence``, and it is always ``machine_verifiable=False``: a
+        sandbox exec result, a file it wrote, a script it ran, a subagent's
+        summary, and the model's own prose are all useful provenance for a
+        human and can none of them contribute to a veto. Only the replay
+        engine's evidence is machine-verifiable, and only that can mark a
+        counterexample REPRODUCED.
         """
         if not result.sandbox_ids and not result.subagent_thread_ids:
             return ()
@@ -329,8 +361,8 @@ class TrueForgeAdversarialTester:
             Evidence(
                 evidence_id=new_id("evidence"),
                 kind=EvidenceKind.COUNTEREXAMPLE,
-                source="trueforge-doppelganger",
-                claim="adversarial exploration performed in a TrueForge sandbox",
+                source=SANDBOX_EVIDENCE_SOURCE,
+                claim="adversarial exploration performed in the DOPPELGÄNGER session",
                 world_id=world.world_id,
                 observed=(
                     f"subagents={len(result.subagent_thread_ids)} "

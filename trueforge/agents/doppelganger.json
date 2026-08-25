@@ -1,5 +1,5 @@
 {
-  "_comment": "AgentSpec for a DOPPELGANGER world agent. Subagents ON (the adversarial investigation is delegated to one) and sandbox ON (for exploratory reproducers). Only read-only world-inspection tools are enabled, by literal name — no mutation tool is reachable from this session at all.",
+  "_comment": "AgentSpec for a DOPPELGANGER world agent. Subagents ON (the adversarial investigation is delegated to one) and sandbox ON (for exploratory reproducers; the backend drives this flag from BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED, and it is the only spec that may ever set it). The sandbox buys TrueForge's built-in `exec` and nothing else: enable_tools is identical whether it is on or off, and everything the sandbox produces is recorded machine_verifiable=false. Only read-only world-inspection tools are enabled, by literal name — no mutation tool is reachable from this session at all.",
   "model": { "name": "REPLACE_WITH_PROVIDER/MODEL", "params": { "temperature": 0 } },
   "mcp_servers": [
     {

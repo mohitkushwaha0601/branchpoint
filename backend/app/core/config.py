@@ -73,8 +73,24 @@ class Settings(BaseSettings):
     """Name BRANCHPOINT is registered under in TrueForge's MCP settings."""
     trueforge_mcp_url: str = "http://127.0.0.1:8000/mcp"
     """URL TrueForge should reach this backend's MCP server on."""
-    trueforge_sandbox_enabled: bool = True
-    """Whether DOPPELGÄNGER sessions get a TrueForge sandbox for exploration."""
+    trueforge_sandbox_enabled: bool = False
+    """Whether DOPPELGÄNGER sessions get a TrueForge sandbox for exploration.
+
+    Off unless ``BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED`` says otherwise. Code
+    execution is opt-in: a deployment that never sets the variable — no ``.env``
+    file, no exported variable — gets no sandbox, rather than one nobody asked
+    for. That is also the fail-closed reading, since an unreachable sandbox
+    provider aborts an adversarial turn.
+
+    DOPPELGÄNGER only. The planner and the commit operator are hardwired to
+    ``sandbox.enabled = false`` and do not consult this setting: nothing that
+    reads reality or writes to it is ever given code execution.
+
+    Turning it on grants exploratory ``exec`` inside the sandbox and nothing
+    else — no extra tools, and no path to a veto. Sandbox output is recorded
+    with ``machine_verifiable=False``; only BRANCHPOINT's own replay can produce
+    the machine-verifiable failing evidence a veto requires.
+    """
 
     demo_scenario_path: str | None = None
     """Override path to the hero scenario fixture (``BRANCHPOINT_DEMO_SCENARIO_PATH``).

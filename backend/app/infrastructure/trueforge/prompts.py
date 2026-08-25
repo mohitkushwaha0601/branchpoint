@@ -74,7 +74,35 @@ tool call. Do not invent metrics or state you did not read.
 """
 
 
-def doppelganger_instructions(run_id: str, world_id: str) -> str:
+#: What the adversary is told about executing code, when it has a sandbox.
+SANDBOX_AVAILABLE_STEP = """\
+3. You have an isolated sandbox. Use its built-in `exec` capability to explore:
+   write and run a small throwaway script against the sanitized fixture data
+   you gathered to check whether your hypothesis actually holds before you
+   submit it. Sandbox output is exploratory evidence only — BRANCHPOINT records
+   it as non-machine-verifiable, and it never by itself vetoes anything."""
+
+#: What it is told instead when this run gave it no sandbox. Claiming a sandbox
+#: it does not have would waste its iterations on calls that cannot succeed.
+SANDBOX_UNAVAILABLE_STEP = """\
+3. You have no sandbox in this run. There is nothing to execute and no script
+   to write: reason directly from what the read-only tools return."""
+
+SANDBOX_AVAILABLE_NOTE = """\
+Note that the sandbox is a convenience, not a precondition. If it is
+unavailable, keep investigating with the read-only tools and still submit any
+counterexample the data you gathered supports — BRANCHPOINT replays it and
+decides for itself, so an unverified-but-grounded submission costs nothing and
+withholding one loses a real finding."""
+
+SANDBOX_UNAVAILABLE_NOTE = """\
+A sandbox was never a precondition for a finding. Submit any counterexample the
+data you gathered supports — BRANCHPOINT replays it and decides for itself, so
+an unverified-but-grounded submission costs nothing and withholding one loses a
+real finding."""
+
+
+def doppelganger_instructions(run_id: str, world_id: str, *, sandbox_enabled: bool = True) -> str:
     """Build the DOPPELGÄNGER brief for one world.
 
     Deliberately omits any hint about which action is dangerous or why. The
@@ -84,8 +112,15 @@ def doppelganger_instructions(run_id: str, world_id: str) -> str:
     on ``(run_id, world_id)``. The adversary has no tool that lists runs, so
     without ``run_id`` here it cannot call any of them and is reduced to
     reasoning about reality alone.
+
+    ``sandbox_enabled`` mirrors the agent spec this brief ships with, so the
+    brief never promises an execution capability the session does not have.
+    Either way the authority boundary is identical: nothing the adversary runs,
+    writes, or says is evidence — only a spec BRANCHPOINT replays itself.
     """
     checks = ", ".join(sorted(REPLAYABLE_CHECKS))
+    sandbox_step = SANDBOX_AVAILABLE_STEP if sandbox_enabled else SANDBOX_UNAVAILABLE_STEP
+    sandbox_note = SANDBOX_AVAILABLE_NOTE if sandbox_enabled else SANDBOX_UNAVAILABLE_NOTE
     metric_invariants = ", ".join(sorted(str(name) for name in METRIC_INVARIANTS))
     check_invariants = ", ".join(sorted(str(name) for name in CHECK_INVARIANTS))
     return f"""\
@@ -126,10 +161,7 @@ one. Only an actual breach of a declared invariant counts.
    it applied, its resulting metrics, its orders summary, and its compatibility
    context. Compare against reality where useful.
 2. Form a specific, falsifiable hypothesis about how this world breaks.
-3. You have a sandbox. Use it to explore: write and run a small throwaway
-   script against the sanitized fixture data you gathered to check whether your
-   hypothesis actually holds before you submit it. Sandbox output is
-   exploratory evidence only — it never by itself vetoes anything.
+{sandbox_step}
 4. Submit your best finding as a structured counterexample (below).
    BRANCHPOINT will replay it deterministically. If BRANCHPOINT reproduces the
    failure, the world is vetoed. If it does not, your attack is recorded as
@@ -147,7 +179,7 @@ Reply with ONE JSON object and nothing else — no prose, no code fences:
 
 {{
   "hypothesis": "<the specific way you believe this world breaks>",
-  "investigated": "<what you actually checked, including sandbox work>",
+  "investigated": "<what you actually checked, tool call by tool call>",
   "counterexample": {{
     "counterexample_type": "COMPATIBILITY | DATA_INTEGRITY | METRIC | INVARIANT",
     "operation": "RETRY_PAYMENT | DESERIALIZE_ORDER | EXECUTE_CHECK | ASSERT_METRIC",
@@ -187,9 +219,5 @@ If, after genuine investigation, you found nothing you can express as a
 replayable counterexample, set "counterexample" to null and say so in
 "hypothesis". That is an honest result. Do not fabricate one.
 
-Note that the sandbox is a convenience, not a precondition. If it is
-unavailable, keep investigating with the read-only tools and still submit any
-counterexample the data you gathered supports — BRANCHPOINT replays it and
-decides for itself, so an unverified-but-grounded submission costs nothing and
-withholding one loses a real finding.
+{sandbox_note}
 """

@@ -166,7 +166,8 @@ uv run uvicorn app.main:app --port 8000     npx @truefoundry/trueforge@0.1.4
 # 3. model provider (key lives in TrueForge, never here)
 # 4. register the MCP server + see how TrueForge classifies each tool
 ../trueforge/scripts/setup_trueforge.sh
-# 5. sandbox (optional; TrueForge has a local fallback)
+# 5. sandbox (opt-in, off unless set; DOPPELGÄNGER only)
+#    export BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED=true
 # 6. start an agent run
 export BRANCHPOINT_MODEL="<provider>/<model-id>"   # one model for every agent
 curl -X POST localhost:8000/api/v1/agent-runs -H 'content-type: application/json' \
@@ -213,7 +214,7 @@ The planner is never told what the incident is. It has to read metrics, deployme
 
 ### DOPPELGÄNGER and the counterexample contract
 
-Each world gets a TrueForge session that delegates the attack to a **real subagent** and gives it a sandbox. An opinion cannot veto anything. A veto requires a typed `CounterexampleSpec` that BRANCHPOINT replays itself:
+Each world gets a TrueForge session that delegates the attack to a **real subagent**, and — when `BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED` is set — an isolated TrueForge sandbox it may run code in. That sandbox is exploratory: `exec` output, files it writes, subagent prose, and model prose are all recorded `machine_verifiable=false`, and none of them can mark a counterexample `REPRODUCED`. Enabling it exposes no additional tool, and no other role ever gets one. An opinion cannot veto anything. A veto requires a typed `CounterexampleSpec` that BRANCHPOINT replays itself:
 
 ```
 counterexample_type   COMPATIBILITY | DATA_INTEGRITY | METRIC | INVARIANT
