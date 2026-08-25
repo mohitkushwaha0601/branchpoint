@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     env: str = "development"
     log_level: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "INFO"
 
+    @property
+    def is_production(self) -> bool:
+        """Whether this process is configured as a production environment.
+
+        Destructive demo-only surfaces (state reset) must check this before
+        exposing anything that discards the current demo scenario.
+        """
+        return self.env.strip().lower() == "production"
+
 
 @lru_cache
 def get_settings() -> Settings:
