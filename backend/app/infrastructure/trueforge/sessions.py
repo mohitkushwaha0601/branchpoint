@@ -25,6 +25,7 @@ class SessionPurpose(StrEnum):
 
     PLANNER = "PLANNER"
     ADVERSARY = "ADVERSARY"
+    COMMIT_OPERATOR = "COMMIT_OPERATOR"
 
 
 class SessionStatus(StrEnum):

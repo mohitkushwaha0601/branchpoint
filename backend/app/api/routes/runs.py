@@ -131,6 +131,7 @@ class ApprovalResponse(BaseModel):
     status: str
     selected_world_id: str
     action_id: str
+    action_fingerprint: str
     requested_at: datetime
     decided_at: datetime | None
     actor: str | None
@@ -182,6 +183,7 @@ class RunResponse(BaseModel):
                 status=str(run.approval.status),
                 selected_world_id=run.approval.selected_world_id,
                 action_id=run.approval.action_id,
+                action_fingerprint=run.approval.action_fingerprint,
                 requested_at=run.approval.requested_at,
                 decided_at=run.approval.decided_at,
                 actor=run.approval.actor,

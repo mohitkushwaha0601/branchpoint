@@ -10,8 +10,14 @@ model calls. Nothing here is mocked — that is the whole point.
     uv run python scripts/smoke_trueforge.py --approve-commit  # DEMO REALITY ONLY
 
 Stages 1-4 need no model and run anywhere TrueForge is up. Stages 5-13 need a
-model provider. Stage 14+ mutates demo reality and only runs behind an explicit
-flag; the script always resets demo reality on the way out.
+model provider and stop at AWAITING_APPROVAL with reality untouched. Stages
+14-21 mutate demo reality and only run behind an explicit flag; the script
+always resets demo reality on the way out.
+
+Nothing in the commit stages touches ``DemoProductionEngine`` directly. The
+approval goes through the real HTTP endpoint, which commits through the real
+destructive MCP tool behind the real capability gate — faking any of it would
+make these assertions worthless.
 """
 
 import argparse
@@ -21,7 +27,7 @@ import sys
 import httpx
 
 from app.infrastructure.trueforge.client import TrueForgeClient
-from app.mcp.server import COMMIT_TOOL_NAME, DESTRUCTIVE_TOOL_NAMES, READ_ONLY_TOOL_NAMES
+from app.mcp.server import DESTRUCTIVE_TOOL_NAMES, READ_ONLY_TOOL_NAMES
 
 BACKEND_URL = "http://127.0.0.1:8000"
 TRUEFORGE_URL = "http://localhost:8790"
@@ -201,7 +207,7 @@ async def stage_hero_flow(http: httpx.AsyncClient, approve_commit: bool) -> bool
 
     if not approve_commit:
         record(
-            "14-16. destructive commit",
+            "14-21. destructive commit",
             SKIP,
             "not approved in an unattended run; pass --approve-commit for demo reality only",
         )
@@ -211,26 +217,128 @@ async def stage_hero_flow(http: httpx.AsyncClient, approve_commit: bool) -> bool
 
 
 async def _stage_commit(http: httpx.AsyncClient, run_id: str, world_id: str | None) -> bool:
-    """14-16. DEMO REALITY ONLY: approve, commit, verify."""
+    """14-21. DEMO REALITY ONLY: approve, commit through TrueForge, verify."""
     if world_id is None:
-        record("14. commit", FAIL, "no recommended world to commit")
+        record("14-21. destructive commit", FAIL, "no recommended world to commit")
         return False
 
     print(f"\n  !! approving the destructive commit of {world_id} against DEMO reality\n")
-    async with TrueForgeClient(base_url=TRUEFORGE_URL) as _:
-        pass
+    ok = True
 
-    # The commit tool is the sanctioned destructive path; calling it here stands
-    # in for a human clicking approve in TrueForge.
-    from app.api.dependencies import get_run_repository
-    from app.mcp.server import build_mcp_server  # noqa: F401  (documents the tool source)
+    run = (await http.get(f"{BACKEND_URL}/api/v1/runs/{run_id}")).json()
+    approval = run["approval"] or {}
+    before = (await http.get(f"{BACKEND_URL}/api/v1/demo/state")).json()
 
-    record("14. commit tool is the only destructive entry point", PASS, COMMIT_TOOL_NAME)
-    state = (await http.get(f"{BACKEND_URL}/api/v1/demo/state")).json()
-    record("15. reality state readable post-run", PASS, f"flag={state['feature_flag']['enabled']}")
-    _ = get_run_repository
-    record("16. demo reality reset", SKIP, "reset happens in the finally block")
-    return True
+    # The client confirms what it believes it is approving. It cannot name a
+    # different action: these are checked against the binding, never applied.
+    response = await http.post(
+        f"{BACKEND_URL}/api/v1/runs/{run_id}/approval",
+        json={
+            "actor": "smoke-test-operator",
+            "expected_world_id": approval.get("selected_world_id"),
+            "expected_action_id": approval.get("action_id"),
+            "expected_action_fingerprint": approval.get("action_fingerprint"),
+        },
+        timeout=900.0,
+    )
+    if response.status_code != 200:
+        record(
+            "14-21. destructive commit",
+            FAIL,
+            f"HTTP {response.status_code}: {response.text[:200]}",
+        )
+        return False
+    decision = response.json()
+
+    agent_run = (await http.get(f"{BACKEND_URL}/api/v1/agent-runs/{run_id}")).json()
+    operator_sessions = [s for s in agent_run["sessions"] if s["purpose"] == "COMMIT_OPERATOR"]
+    ok &= _record(
+        "14. destructive TrueForge call reached the approval gate",
+        bool(operator_sessions),
+        ", ".join(s["trueforge_session_id"] for s in operator_sessions) or "no operator session",
+    )
+
+    committed = (await http.get(f"{BACKEND_URL}/api/v1/runs/{run_id}")).json()
+    granted = committed["approval"] or {}
+    ok &= _record(
+        "15. explicit human approval recorded",
+        granted.get("status") == "APPROVED" and granted.get("actor") == "smoke-test-operator",
+        f"{granted.get('status')} by {granted.get('actor')}",
+    )
+    ok &= _record(
+        "16. approval matches the recommended world, action, and fingerprint",
+        granted.get("selected_world_id") == world_id
+        and granted.get("action_id") == approval.get("action_id")
+        and granted.get("action_fingerprint") == approval.get("action_fingerprint"),
+        f"world={granted.get('selected_world_id')} action={granted.get('action_id')}",
+    )
+
+    ok &= _record(
+        "17. exactly the approved action committed",
+        committed["commit_status"] == "SUCCEEDED"
+        and decision["action_id"] == approval.get("action_id"),
+        f"{decision.get('action_name')} ({committed['commit_status']})",
+    )
+
+    events = (await http.get(f"{BACKEND_URL}/api/v1/runs/{run_id}/events")).json()["events"]
+    types = [e["event_type"] for e in events]
+    ok &= _record(
+        "18. independent verification passed",
+        committed["verification_status"] == "PASSED"
+        and "VERIFICATION_STARTED" in types
+        and "VERIFICATION_COMPLETED" in types,
+        str(committed["verification_status"]),
+    )
+    ok &= _record(
+        "19. run reached SUCCEEDED",
+        committed["status"] == "SUCCEEDED" and "RUN_SUCCEEDED" in types,
+        committed["status"],
+    )
+
+    after = (await http.get(f"{BACKEND_URL}/api/v1/demo/state")).json()
+    ok &= _record(
+        "20. reality matches the committed action",
+        _reality_matches(before, after),
+        f"flag {before['feature_flag']['enabled']} -> {after['feature_flag']['enabled']}, "
+        f"version {before['deployment']['version']} -> {after['deployment']['version']}",
+    )
+
+    # A replay must not produce a second mutation. The approval endpoint is
+    # idempotent, and no fresh capability can be issued for a finished run.
+    replay = await http.post(
+        f"{BACKEND_URL}/api/v1/runs/{run_id}/approval",
+        json={"actor": "smoke-test-operator"},
+        timeout=900.0,
+    )
+    capability = await http.post(f"{BACKEND_URL}/api/v1/runs/{run_id}/commit-capability")
+    final = (await http.get(f"{BACKEND_URL}/api/v1/runs/{run_id}")).json()
+    ok &= _record(
+        "21. replayed commit rejected",
+        capability.status_code == 409
+        and final["commit_id"] == committed["commit_id"]
+        and types.count("COMMIT_COMPLETED") == 1
+        and replay.status_code == 200,
+        f"capability HTTP {capability.status_code}, one commit {final['commit_id']}",
+    )
+    return ok
+
+
+def _record(stage: str, passed: bool, detail: str = "") -> bool:
+    """Record a boolean stage result and return it."""
+    record(stage, PASS if passed else FAIL, detail)
+    return passed
+
+
+def _reality_matches(before: dict, after: dict) -> bool:
+    """Whether observed reality changed in the way the committed action implies.
+
+    Derived from the demo state endpoint, never from the engine object: this is
+    an outside-in check that the mutation actually landed.
+    """
+    flag_changed = before["feature_flag"]["enabled"] and not after["feature_flag"]["enabled"]
+    version_changed = before["deployment"]["version"] != after["deployment"]["version"]
+    replicas_changed = before["capacity"]["replicas"] != after["capacity"]["replicas"]
+    return flag_changed or version_changed or replicas_changed
 
 
 async def main() -> int:
@@ -254,7 +362,7 @@ async def main() -> int:
             ok &= await stage_tool_annotations(client)
 
             if args.checks_only:
-                record("5-16. model-dependent stages", SKIP, "--checks-only")
+                record("5-21. model-dependent stages", SKIP, "--checks-only")
             elif await stage_model_available(client):
                 ok &= await stage_hero_flow(http, args.approve_commit)
 

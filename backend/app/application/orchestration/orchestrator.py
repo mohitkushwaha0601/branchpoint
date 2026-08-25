@@ -377,6 +377,11 @@ class BranchpointOrchestrator:
 
         started_at = self._clock()
         run = await self._store(run.transition_to(RunStatus.VERIFYING, at=started_at))
+        await self._emit(
+            run,
+            RunEventType.VERIFICATION_STARTED,
+            f"independently verifying commit {commit_receipt.commit_id}",
+        )
         checks = await self._guard(
             run, "verification failed", lambda: verifier.verify(run, commit_receipt)
         )
@@ -397,7 +402,14 @@ class BranchpointOrchestrator:
         await self._emit(run, RunEventType.VERIFICATION_COMPLETED, f"verification {status}")
 
         if status is VerificationStatus.PASSED:
-            return await self._store(run.transition_to(RunStatus.SUCCEEDED, at=self._clock()))
+            run = await self._store(run.transition_to(RunStatus.SUCCEEDED, at=self._clock()))
+            await self._emit(
+                run,
+                RunEventType.RUN_SUCCEEDED,
+                "committed action verified in reality",
+                world_id=run.selected_world_id,
+            )
+            return run
         return await self._store(run.fail(f"verification {status}", at=self._clock()))
 
     async def drive_to_approval(self, incident: Incident) -> BranchpointRun:

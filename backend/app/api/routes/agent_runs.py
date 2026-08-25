@@ -1,11 +1,16 @@
 """Phase 3 agent-run endpoints.
 
 ``POST /api/v1/agent-runs`` starts a TrueForge-backed BRANCHPOINT run and
-drives it to the human approval gate. It never commits: changing reality
-requires the destructive ``branchpoint_commit_recommended_world`` MCP tool,
-which TrueForge pauses for explicit human approval. There is deliberately no
-REST endpoint that approves or commits, so there is exactly one approval path
-rather than two competing ones.
+drives it to the human approval gate. It never commits.
+
+``POST /api/v1/runs/{run_id}/approval`` is where a human says yes. That one
+endpoint is the *only* place a commit can be authorized, and it carries no
+action content: the caller cannot name an action, only confirm the one
+BRANCHPOINT already recommended and bound. Approving there drives the commit
+through the sanctioned destructive path — the
+``branchpoint_commit_recommended_world`` MCP tool, invoked by a TrueForge
+commit operator whose tool call BRANCHPOINT resumes on behalf of the approval
+it already holds — and then through independent verification.
 """
 
 from datetime import datetime
@@ -18,8 +23,15 @@ from app.api.dependencies import (
     RunRepositoryDep,
     SessionBindingStoreDep,
     build_agent_orchestrator,
+    build_approval_coordinator,
 )
+from app.application.errors import RunNotFoundError
 from app.application.orchestration.agent_run import AgentRunService
+from app.application.orchestration.approval import (
+    ApprovalMismatchError,
+    ApprovalNotAvailableError,
+    CommitFailedError,
+)
 from app.core.config import ModelNotConfiguredError, Settings, get_settings
 from app.domain.comparison.models import ComparisonResult
 from app.domain.incidents.models import Incident, IncidentSeverity
@@ -49,6 +61,34 @@ class StartAgentRunRequest(BaseModel):
             detected_at=utc_now(),
             affected_services=self.affected_services,
         )
+
+
+class ApproveRunRequest(BaseModel):
+    """Body of ``POST /api/v1/runs/{run_id}/approval``.
+
+    Carries **no action content**. ``expected_*`` are optional confirmations of
+    what the human believes they are approving; a value that disagrees with the
+    bound approval is a conflict, never an instruction to commit something else.
+    """
+
+    actor: str = Field(min_length=1, max_length=200)
+    expected_world_id: str | None = None
+    expected_action_id: str | None = None
+    expected_action_fingerprint: str | None = None
+
+
+class ApprovalDecisionResponse(BaseModel):
+    """What the frontend needs after submitting a human approval."""
+
+    run_id: str
+    world_id: str
+    action_id: str
+    action_name: str
+    approval_status: str
+    run_status: RunStatus
+    commit_status: str | None
+    verification_status: str | None
+    detail: str
 
 
 class SessionBindingResponse(BaseModel):
@@ -229,6 +269,74 @@ async def get_agent_run(
 ) -> AgentRunResponse:
     """Return a run's status together with its TrueForge session bindings."""
     return await _agent_run_response(run_id, repository, bindings)
+
+
+@router.post("/runs/{run_id}/approval", response_model=ApprovalDecisionResponse)
+async def approve_run(run_id: str, body: ApproveRunRequest) -> ApprovalDecisionResponse:
+    """Record explicit human approval of the recommended world, and commit it.
+
+    This is a decision, not a mutation request: the body carries no action, no
+    parameters, and no target. BRANCHPOINT commits exactly the action it already
+    bound to this run's approval, through the destructive MCP tool, and then
+    verifies reality independently. Re-submitting is idempotent — a run a human
+    already approved is returned as-is rather than committed twice.
+    """
+    settings: Settings = get_settings()
+    try:
+        settings.resolve_model()
+    except ModelNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    coordinator = build_approval_coordinator()
+    try:
+        run = await coordinator.approve(
+            run_id,
+            actor=body.actor,
+            expected_world_id=body.expected_world_id,
+            expected_action_id=body.expected_action_id,
+            expected_action_fingerprint=body.expected_action_fingerprint,
+        )
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ApprovalNotAvailableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ApprovalMismatchError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except CommitFailedError as exc:
+        # The run itself carries what happened; this is not a client error.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        ) from exc
+    except TrueForgeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"TrueForge failure: {exc}"
+        ) from exc
+
+    return _approval_response(run)
+
+
+def _approval_response(run) -> ApprovalDecisionResponse:
+    """Render the post-approval state a frontend needs."""
+    approval = run.approval
+    assert approval is not None  # an approved run always carries its approval
+    world = run.require_world(approval.selected_world_id)
+    return ApprovalDecisionResponse(
+        run_id=run.run_id,
+        world_id=approval.selected_world_id,
+        action_id=approval.action_id,
+        action_name=world.candidate_action.name,
+        approval_status=str(approval.status),
+        run_status=run.status,
+        commit_status=str(run.commit_receipt.status) if run.commit_receipt else None,
+        verification_status=str(run.verification.status) if run.verification else None,
+        detail=(
+            f"{world.candidate_action.name} committed and independently verified"
+            if run.status is RunStatus.SUCCEEDED
+            else f"run is {run.status}: {run.failure_reason or 'see run detail'}"
+        ),
+    )
 
 
 @router.get("/runs/{run_id}/worlds", response_model=WorldsResponse)

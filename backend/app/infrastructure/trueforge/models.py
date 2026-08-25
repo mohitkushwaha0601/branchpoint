@@ -83,11 +83,21 @@ class TurnEvent(TrueForgeModel):
 
 
 class PendingApproval(TrueForgeModel):
-    """A tool call paused awaiting human approval."""
+    """A tool call paused awaiting human approval.
+
+    ``name``/``arguments`` mirror the paused call as TrueForge reports it, so a
+    caller can check *what* it is about to allow before allowing it. Both
+    default to empty because upstream is not obliged to repeat them on the
+    required action — :meth:`TurnResult.paused_tool_call` falls back to the
+    turn's ``tool.approval_required`` event, and a caller that still cannot
+    identify the call must fail closed rather than approve blind.
+    """
 
     thread_id: str
     tool_call_id: str
     source_event_id: str = ""
+    name: str = ""
+    arguments: str = ""
 
 
 class TurnResult(TrueForgeModel):
@@ -105,6 +115,26 @@ class TurnResult(TrueForgeModel):
     def is_paused_for_approval(self) -> bool:
         """Whether the turn stopped because a tool call needs human approval."""
         return bool(self.pending_approvals)
+
+    def paused_tool_call(self, pending: PendingApproval) -> ToolCallView | None:
+        """Resolve the full tool call one pending approval refers to.
+
+        Prefers what the required action itself reported; otherwise looks the
+        call up by id in this turn's ``tool.approval_required`` events. Returns
+        ``None`` when neither identifies the call — the caller must then treat
+        the approval as unidentifiable and refuse it.
+        """
+        if pending.name:
+            return ToolCallView(
+                id=pending.tool_call_id, name=pending.name, arguments=pending.arguments
+            )
+        for event in self.events:
+            if event.type != EVENT_TOOL_APPROVAL_REQUIRED:
+                continue
+            for call in event.tool_calls:
+                if call.id == pending.tool_call_id and call.name:
+                    return call
+        return None
 
     @property
     def subagent_thread_ids(self) -> tuple[str, ...]:

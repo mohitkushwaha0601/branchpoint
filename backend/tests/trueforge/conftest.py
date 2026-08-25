@@ -65,7 +65,6 @@ async def commit_harness() -> AsyncIterator[CommitHarness]:
         capability_store=capability_store,
         run_repository=repository,
         orchestrator_factory=lambda: orchestrator,
-        approval_actor="human-via-trueforge",
     )
     harness = MCPTestHarness(mcp, engine, capability_store, repository)
     yield CommitHarness(engine=engine, orchestrator=orchestrator, mcp=harness, events=events)

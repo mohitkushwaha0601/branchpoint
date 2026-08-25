@@ -8,6 +8,8 @@ world executor; MCP tools back the reality reader, mutator, and verifier.
 from collections.abc import Sequence
 from typing import Protocol
 
+from pydantic import BaseModel, ConfigDict
+
 from app.domain.actions.models import CandidateAction
 from app.domain.commits.models import CommitReceipt, OperationReceipt
 from app.domain.events import RunEvent
@@ -77,6 +79,37 @@ class RealityVerifier(Protocol):
         self, run: BranchpointRun, commit_receipt: CommitReceipt
     ) -> Sequence[VerificationCheck]:
         """Return post-commit checks against reality."""
+        ...
+
+
+class CommitOperatorReport(BaseModel):
+    """What the sanctioned destructive commit path actually did.
+
+    Audit metadata only. It never carries a capability token, and it is never
+    the source of truth for whether reality changed — the run's own commit
+    receipt and verification result are.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    session_id: str = ""
+    turn_id: str = ""
+    tool_called: bool = False
+    detail: str = ""
+
+
+class CommitOperator(Protocol):
+    """Drives the approved commit through the sanctioned destructive tool path.
+
+    Implementations do not decide *whether* to commit and cannot choose *what*
+    to commit: the run arrives with a granted approval already bound to one
+    exact world, action, and action fingerprint, and every layer below
+    (the MCP tool, Phase 1's ``assert_commit_allowed``, and the one-time
+    capability) re-checks that binding independently.
+    """
+
+    async def commit(self, run: BranchpointRun, world: World) -> CommitOperatorReport:
+        """Invoke the approved commit and return what the destructive path did."""
         ...
 
 

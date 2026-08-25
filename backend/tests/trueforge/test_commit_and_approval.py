@@ -2,7 +2,11 @@
 
 Drives a full run with deterministic demo adapters so the *approval and commit
 gates* are exercised for real, then calls the destructive MCP commit tool
-exactly the way TrueForge would after a human allows it.
+exactly the way the TrueForge commit operator does once BRANCHPOINT resumes it.
+
+The human decision is recorded in BRANCHPOINT *first* — the tool records no
+approval of its own — so every commit here is preceded by an explicit
+``decide_approval``, exactly as ``POST /api/v1/runs/{run_id}/approval`` does.
 """
 
 import pytest
@@ -29,6 +33,11 @@ from tests.mcp.conftest import mcp_session
 from tests.trueforge.conftest import CommitHarness
 
 
+async def approve(harness: CommitHarness, run) -> None:
+    """Record the human decision, exactly as the approval endpoint does."""
+    await harness.orchestrator.decide_approval(run.run_id, approved=True, actor="human")
+
+
 def incident() -> Incident:
     return Incident(
         incident_id=new_id("incident"),
@@ -39,8 +48,8 @@ def incident() -> Incident:
     )
 
 
-async def test_commit_tool_requires_a_run_awaiting_approval(commit_harness: CommitHarness) -> None:
-    """An agent cannot commit a run that has not reached the approval gate."""
+async def test_commit_tool_requires_a_granted_approval(commit_harness: CommitHarness) -> None:
+    """An agent cannot commit a run no human has approved."""
     run = await commit_harness.orchestrator.create_run(incident())
 
     async with mcp_session(commit_harness.mcp) as session:
@@ -49,7 +58,24 @@ async def test_commit_tool_requires_a_run_awaiting_approval(commit_harness: Comm
         )
 
     assert result.is_error is True
-    assert "awaiting approval" in result.content[0].text
+    assert "no granted human approval" in result.content[0].text
+
+
+async def test_commit_tool_refuses_a_run_still_awaiting_approval(
+    commit_harness: CommitHarness,
+) -> None:
+    """Reaching the gate is not the same as passing it: reality stays untouched."""
+    run = await commit_harness.drive_to_approval(incident())
+    recommended = run.comparison.recommended_world_id
+
+    async with mcp_session(commit_harness.mcp) as session:
+        result = await session.call_tool(
+            COMMIT_TOOL_NAME, {"run_id": run.run_id, "world_id": recommended}
+        )
+
+    assert result.is_error is True
+    assert "no granted human approval" in result.content[0].text
+    assert (await commit_harness.engine.reality()).pricing_flag.enabled is True
 
 
 async def test_commit_tool_refuses_a_world_that_is_not_recommended(
@@ -59,6 +85,7 @@ async def test_commit_tool_refuses_a_world_that_is_not_recommended(
     run = await commit_harness.drive_to_approval(incident())
     recommended = run.comparison.recommended_world_id
     other = next(w.world_id for w in run.worlds if w.world_id != recommended)
+    await approve(commit_harness, run)
 
     async with mcp_session(commit_harness.mcp) as session:
         result = await session.call_tool(
@@ -66,7 +93,7 @@ async def test_commit_tool_refuses_a_world_that_is_not_recommended(
         )
 
     assert result.is_error is True
-    assert "not the recommended world" in result.content[0].text
+    assert "the human approved world" in result.content[0].text
     assert (await commit_harness.engine.reality()).pricing_flag.enabled is True
 
 
@@ -74,6 +101,7 @@ async def test_commit_tool_refuses_a_mismatched_action_id(commit_harness: Commit
     """A changed action after approval is refused via the expected-action check."""
     run = await commit_harness.drive_to_approval(incident())
     recommended = run.comparison.recommended_world_id
+    await approve(commit_harness, run)
 
     async with mcp_session(commit_harness.mcp) as session:
         result = await session.call_tool(
@@ -96,6 +124,7 @@ async def test_approved_commit_mutates_reality_and_verifies(
     run = await commit_harness.drive_to_approval(incident())
     recommended = run.comparison.recommended_world_id
     assert (await commit_harness.engine.reality()).pricing_flag.enabled is True
+    await approve(commit_harness, run)
 
     async with mcp_session(commit_harness.mcp) as session:
         result = await session.call_tool(
@@ -116,6 +145,7 @@ async def test_commit_never_returns_a_capability_token(commit_harness: CommitHar
     """The model must never see capability material."""
     run = await commit_harness.drive_to_approval(incident())
     recommended = run.comparison.recommended_world_id
+    await approve(commit_harness, run)
 
     async with mcp_session(commit_harness.mcp) as session:
         result = await session.call_tool(
@@ -132,6 +162,7 @@ async def test_commit_is_not_repeatable(commit_harness: CommitHarness) -> None:
     """A second commit attempt cannot re-mutate reality (capability is one-time)."""
     run = await commit_harness.drive_to_approval(incident())
     recommended = run.comparison.recommended_world_id
+    await approve(commit_harness, run)
 
     async with mcp_session(commit_harness.mcp) as session:
         first = await session.call_tool(

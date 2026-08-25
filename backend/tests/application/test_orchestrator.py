@@ -166,7 +166,9 @@ async def test_happy_path_reaches_succeeded() -> None:
         RunEventType.APPROVAL_GRANTED,
         RunEventType.COMMIT_STARTED,
         RunEventType.COMMIT_COMPLETED,
+        RunEventType.VERIFICATION_STARTED,
         RunEventType.VERIFICATION_COMPLETED,
+        RunEventType.RUN_SUCCEEDED,
     ]
 
 

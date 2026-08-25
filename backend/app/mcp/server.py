@@ -341,7 +341,6 @@ def build_mcp_server(
     capability_store: CapabilityStore | None = None,
     run_repository=None,
     orchestrator_factory: Callable[[], Any] | None = None,
-    approval_actor: str = "human-via-trueforge",
 ) -> MCPServer:
     """Build the BRANCHPOINT MCP server bound to the process-wide demo singletons.
 
@@ -732,9 +731,10 @@ def build_mcp_server(
         title="Commit recommended world",
         description=(
             "Apply the deterministically recommended world's action to production reality, "
-            "then independently verify the result. Requires the run to be awaiting approval "
-            "with this exact world recommended. This is the only tool an agent should use to "
-            "change reality; it never exposes a capability token."
+            "then independently verify the result. Requires a human to have already approved "
+            "this exact world in BRANCHPOINT; this tool records no approval of its own. It is "
+            "the only tool an agent should use to change reality, and it never exposes a "
+            "capability token."
         ),
         annotations=DESTRUCTIVE_TOOL_ANNOTATIONS,
     )
@@ -744,9 +744,22 @@ def build_mcp_server(
         run = await demo_run_repository.get(run_id)
         if run is None:
             raise ToolError(f"run {run_id} does not exist")
-        if run.status is not RunStatus.AWAITING_APPROVAL:
+
+        # The human decision is made in BRANCHPOINT, before this tool is ever
+        # called, and is bound there to one exact world and action fingerprint.
+        # This tool only *executes* that decision; it can neither make one nor
+        # widen one. A run that has not been approved is refused outright.
+        approval = run.approval
+        if approval is None or not approval.is_granted:
             raise ToolError(
-                f"run {run_id} is {run.status}; only a run awaiting approval may be committed"
+                f"run {run_id} is {run.status} and has no granted human approval; "
+                "a human must approve it in BRANCHPOINT before it can be committed"
+            )
+        if run.status is not RunStatus.APPROVED:
+            raise ToolError(f"run {run_id} is {run.status}; only an APPROVED run may be committed")
+        if approval.selected_world_id != world_id:
+            raise ToolError(
+                f"the human approved world {approval.selected_world_id}, not {world_id}"
             )
         if run.comparison is None or run.comparison.recommended_world_id != world_id:
             recommended = run.comparison.recommended_world_id if run.comparison else None
@@ -765,17 +778,18 @@ def build_mcp_server(
                 f"not the expected {expected_action_id}"
             )
 
+        if world.candidate_action.fingerprint() != approval.action_fingerprint:
+            raise ToolError(
+                f"action {approval.action_id} changed after it was approved; "
+                "the approval does not authorize this action"
+            )
+
         orchestrator = orchestrator_factory()
-        # Reaching this line means TrueForge already paused this destructive
-        # tool call and a human explicitly allowed it. That human decision is
-        # what we record here, bound by Phase 1 to this exact world and to a
-        # content fingerprint of this exact action.
-        run = await orchestrator.decide_approval(
-            run_id,
-            approved=True,
-            actor=approval_actor,
-            reason="approved by human via TrueForge tool approval",
-        )
+        # Reaching this line means a human approved this exact world in
+        # BRANCHPOINT *and* TrueForge paused this destructive call until that
+        # recorded decision was replayed against it. Phase 1's own
+        # ``assert_commit_allowed`` re-checks the binding once more inside
+        # ``commit()``, and the one-time capability checks it a third time.
         run = await orchestrator.commit(run.run_id)
         commit_status = run.commit_receipt.status if run.commit_receipt else CommitStatus.FAILED
 

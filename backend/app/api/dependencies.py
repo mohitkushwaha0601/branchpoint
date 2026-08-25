@@ -19,6 +19,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from app.application.orchestration.approval import ApprovalCoordinator
 from app.application.orchestration.orchestrator import BranchpointOrchestrator
 from app.infrastructure.demo.adapters import (
     DemoRealityMutator,
@@ -31,6 +32,7 @@ from app.infrastructure.demo.hero import HeroAdversarialTester, HeroCandidatePla
 from app.infrastructure.persistence.memory import InMemoryEventSink, InMemoryRunRepository
 from app.infrastructure.trueforge.adversary import TrueForgeAdversarialTester
 from app.infrastructure.trueforge.client import TrueForgeClient
+from app.infrastructure.trueforge.commit_operator import TrueForgeCommitOperator
 from app.infrastructure.trueforge.planner import PLANNER_TOOLS, TrueForgeCandidatePlanner
 from app.infrastructure.trueforge.sessions import InMemorySessionBindingStore
 
@@ -140,6 +142,38 @@ def build_agent_orchestrator() -> BranchpointOrchestrator:
         ),
         mutator=DemoRealityMutator(engine, capability_store),
         verifier=DemoRealityVerifier(engine),
+    )
+
+
+def build_commit_operator() -> TrueForgeCommitOperator:
+    """Build the TrueForge agent that carries out one approved commit."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    return TrueForgeCommitOperator(
+        get_trueforge_client(),
+        model=settings.resolve_model(),
+        bindings=get_session_binding_store(),
+        mcp_server_name=settings.trueforge_mcp_server_name,
+    )
+
+
+def build_approval_coordinator() -> ApprovalCoordinator:
+    """Build the coordinator behind ``POST /api/v1/runs/{run_id}/approval``.
+
+    Deliberately wired to the *demo* orchestrator, not the agent one: recording
+    the human decision and running the Phase 1 mutate/verify steps needs the
+    reality adapters, not a planner or an adversary. Both orchestrators share
+    the process-wide run repository and event sink, so this observes and
+    advances exactly the run ``POST /api/v1/agent-runs`` created.
+    """
+    repository = get_run_repository()
+    events = get_event_sink()
+    return ApprovalCoordinator(
+        orchestrator=get_demo_orchestrator(repository, events),
+        repository=repository,
+        events=events,
+        commit_operator=build_commit_operator(),
     )
 
 
