@@ -1,0 +1,69 @@
+{
+  "description": "Checkout error rate at ~41% following pricing-service v2.41, driven by a PRICING_V2 regression that is amplified when the flag is enabled on v2.41.",
+  "snapshot_at": "2026-08-24T08:00:00+00:00",
+  "orders_schema_version": 41,
+  "pricing_deployment": {
+    "service": "pricing-service",
+    "version": "v2.41",
+    "previous_version": "v2.40",
+    "deployed_at": "2026-08-24T06:30:00+00:00"
+  },
+  "pricing_flag": {
+    "key": "PRICING_V2",
+    "enabled": true,
+    "service": "pricing-service"
+  },
+  "pricing_capacity": {
+    "service": "pricing-service",
+    "replicas": 4,
+    "cost_per_replica_per_day": 112.5
+  },
+  "database": {
+    "latency_ms": 12.0
+  },
+  "checkout_capacity": {
+    "cpu_utilization": 0.42
+  },
+  "orders": [
+    {
+      "order_id": "order_1001",
+      "created_under_version": "v2.40",
+      "schema_version": 40,
+      "amount_cents": 4999,
+      "status": "CAPTURED",
+      "payment_revision": null
+    },
+    {
+      "order_id": "order_1002",
+      "created_under_version": "v2.40",
+      "schema_version": 40,
+      "amount_cents": 12999,
+      "status": "CAPTURED",
+      "payment_revision": null
+    },
+    {
+      "order_id": "order_1003",
+      "created_under_version": "v2.41",
+      "schema_version": 41,
+      "amount_cents": 7999,
+      "status": "CAPTURED",
+      "payment_revision": "pr_7f3a91"
+    },
+    {
+      "order_id": "order_1004",
+      "created_under_version": "v2.41",
+      "schema_version": 41,
+      "amount_cents": 15999,
+      "status": "CAPTURED",
+      "payment_revision": "pr_2b88c4"
+    },
+    {
+      "order_id": "order_1005",
+      "created_under_version": "v2.41",
+      "schema_version": 41,
+      "amount_cents": 3499,
+      "status": "PENDING",
+      "payment_revision": "pr_9e10aa"
+    }
+  ]
+}
