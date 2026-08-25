@@ -154,16 +154,55 @@ class ReproductionResult(DemoModel):
     evidence: tuple[Evidence, ...] = ()
 
 
+#: Which assertion kinds each operation can actually evaluate.
+#:
+#: ``reproduce`` dispatches on the *operation*, so an assertion the chosen
+#: operation never reads is not a harmless extra field: it would mean vetoing a
+#: world on a property the attacker did not assert. Pairing is therefore part of
+#: the contract and is rejected here rather than silently ignored.
+_ASSERTION_KINDS_BY_OPERATION: dict[CounterexampleOperation, frozenset[AssertionKind]] = {
+    CounterexampleOperation.RETRY_PAYMENT: frozenset({AssertionKind.CHECK_PASSES}),
+    CounterexampleOperation.DESERIALIZE_ORDER: frozenset({AssertionKind.CHECK_PASSES}),
+    CounterexampleOperation.EXECUTE_CHECK: frozenset({AssertionKind.CHECK_PASSES}),
+    CounterexampleOperation.ASSERT_METRIC: frozenset(
+        {AssertionKind.METRIC_AT_MOST, AssertionKind.METRIC_AT_LEAST}
+    ),
+    CounterexampleOperation.ASSERT_INVARIANT: frozenset(
+        {AssertionKind.METRIC_AT_MOST, AssertionKind.METRIC_AT_LEAST}
+    ),
+}
+
+#: Operations whose assertion is implied by the operation itself. The named
+#: compatibility primitives state their own property (a retry stays idempotent,
+#: a record still deserializes), so ``check_name`` is optional for them.
+_SELF_ASSERTING_OPERATIONS: frozenset[CounterexampleOperation] = frozenset(
+    {CounterexampleOperation.RETRY_PAYMENT, CounterexampleOperation.DESERIALIZE_ORDER}
+)
+
+
 def validate_spec(spec: CounterexampleSpec) -> None:
     """Reject a spec whose operation and assertion cannot be replayed.
 
-    Runs before any replay, so an unsupported check name or metric never
-    reaches the engine.
+    Runs before any replay, so an unsupported check name or metric — or an
+    assertion the chosen operation cannot evaluate — never reaches the engine.
     """
     assertion = spec.assertion
+
+    permitted = _ASSERTION_KINDS_BY_OPERATION[spec.operation]
+    if assertion.kind not in permitted:
+        raise SpecValidationError(
+            f"operation {spec.operation} cannot evaluate a {assertion.kind} assertion; "
+            f"it accepts {sorted(kind.value for kind in permitted)}"
+        )
+
     if assertion.kind is AssertionKind.CHECK_PASSES:
-        if not assertion.check_name:
-            raise SpecValidationError("CHECK_PASSES requires assertion.check_name")
+        # ``None`` means "omitted", which the self-asserting operations allow.
+        # An explicitly supplied but empty name is malformed, not omitted, and
+        # falls through to the allowlist check below.
+        if assertion.check_name is None:
+            if spec.operation in _SELF_ASSERTING_OPERATIONS:
+                return
+            raise SpecValidationError(f"{spec.operation} requires assertion.check_name")
         if assertion.check_name not in REPLAYABLE_CHECKS:
             raise SpecValidationError(
                 f"unknown check {assertion.check_name!r}; "
@@ -230,7 +269,8 @@ def _metric_check(spec: CounterexampleSpec, state: DemoProductionState) -> Check
     """Replay a metric assertion against the world's derived metrics."""
     metrics = compute_metrics(state)
     assertion = spec.assertion
-    assert assertion.metric is not None and assertion.threshold is not None  # validated
+    if assertion.metric is None or assertion.threshold is None:
+        raise SpecValidationError(f"{assertion.kind} requires assertion.metric and threshold")
     value = float(getattr(metrics, assertion.metric))
     if assertion.kind is AssertionKind.METRIC_AT_MOST:
         passed = value <= assertion.threshold
@@ -252,7 +292,8 @@ def _metric_check(spec: CounterexampleSpec, state: DemoProductionState) -> Check
 def _named_check(spec: CounterexampleSpec, state: DemoProductionState) -> CheckResult:
     """Replay one of the named deterministic workload checks."""
     check_name = spec.assertion.check_name
-    assert check_name is not None  # validated
+    if check_name is None:
+        raise SpecValidationError(f"{spec.operation} requires assertion.check_name")
     return REPLAYABLE_CHECKS[check_name](state)  # type: ignore[operator]
 
 

@@ -1,5 +1,7 @@
 """The CounterexampleSpec replay engine: the only authoritative veto input."""
 
+from pathlib import Path
+
 import pytest
 
 from app.domain.actions.models import ActionType
@@ -179,3 +181,83 @@ def test_replay_never_mutates_the_state_it_is_given() -> None:
     reproduce(compatibility_spec(), ALPHA)
 
     assert ALPHA == before
+
+
+@pytest.mark.parametrize(
+    ("operation", "assertion"),
+    [
+        (
+            CounterexampleOperation.EXECUTE_CHECK,
+            CounterexampleAssertion(
+                kind=AssertionKind.METRIC_AT_MOST, metric="checkout_error_rate", threshold=0.01
+            ),
+        ),
+        (
+            CounterexampleOperation.ASSERT_METRIC,
+            CounterexampleAssertion(kind=AssertionKind.CHECK_PASSES, check_name="data_integrity"),
+        ),
+        (
+            CounterexampleOperation.ASSERT_INVARIANT,
+            CounterexampleAssertion(kind=AssertionKind.CHECK_PASSES, check_name="data_integrity"),
+        ),
+        (
+            CounterexampleOperation.RETRY_PAYMENT,
+            CounterexampleAssertion(
+                kind=AssertionKind.METRIC_AT_LEAST, metric="checkout_error_rate", threshold=0.01
+            ),
+        ),
+    ],
+)
+def test_an_assertion_the_operation_cannot_evaluate_is_rejected(
+    operation: CounterexampleOperation, assertion: CounterexampleAssertion
+) -> None:
+    """Pairing is part of the contract, not a field the engine may ignore.
+
+    ``reproduce`` dispatches on the operation, so an assertion the operation
+    never reads would mean vetoing a world on a property the attacker never
+    asserted. Both directions of the mismatch must be rejected as a spec
+    problem, not surface as an internal error.
+    """
+    spec = compatibility_spec().model_copy(update={"operation": operation, "assertion": assertion})
+
+    with pytest.raises(SpecValidationError, match="cannot evaluate"):
+        validate_spec(spec)
+
+    with pytest.raises(SpecValidationError, match="cannot evaluate"):
+        reproduce(spec, ALPHA)
+
+
+def test_a_self_asserting_compatibility_operation_needs_no_check_name() -> None:
+    """RETRY_PAYMENT / DESERIALIZE_ORDER state their own property."""
+    spec = compatibility_spec().model_copy(
+        update={"assertion": CounterexampleAssertion(kind=AssertionKind.CHECK_PASSES)}
+    )
+
+    validate_spec(spec)
+    assert reproduce(spec, ALPHA).reproduced is True
+    assert reproduce(spec, BETA).reproduced is False
+
+
+def test_execute_check_still_requires_a_check_name() -> None:
+    spec = compatibility_spec().model_copy(
+        update={
+            "operation": CounterexampleOperation.EXECUTE_CHECK,
+            "assertion": CounterexampleAssertion(kind=AssertionKind.CHECK_PASSES),
+        }
+    )
+
+    with pytest.raises(SpecValidationError, match="check_name"):
+        validate_spec(spec)
+
+
+def test_validation_does_not_depend_on_assert_statements() -> None:
+    """The guards must hold under ``python -O``, where ``assert`` is stripped."""
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "infrastructure"
+        / "demo"
+        / "counterexample.py"
+    ).read_text()
+
+    assert "\n    assert " not in source
