@@ -33,14 +33,16 @@ class StubRealityReader:
 
 
 class StubPlanner:
-    """Returns fixed candidate actions."""
+    """Returns fixed candidate actions and records the run it was asked about."""
 
     def __init__(self, candidates: Sequence[CandidateAction]) -> None:
         self._candidates = tuple(candidates)
+        self.planned_run_ids: list[str] = []
 
     async def plan(
-        self, incident: Incident, observed_state: ObservedState
+        self, incident: Incident, observed_state: ObservedState, *, run_id: str
     ) -> Sequence[CandidateAction]:
+        self.planned_run_ids.append(run_id)
         return self._candidates
 
 

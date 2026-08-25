@@ -78,7 +78,7 @@ async def test_planner_output_validates_into_candidate_actions() -> None:
     fake = FakeTrueForge([FakeTurn(output=json.dumps(VALID_PLAN))])
     planner, _ = build_planner(fake)
 
-    actions = await planner.plan(make_incident(), make_observed_state())
+    actions = await planner.plan(make_incident(), make_observed_state(), run_id="run_1")
 
     assert len(actions) == 3
     assert all(isinstance(action, CandidateAction) for action in actions)
@@ -96,7 +96,7 @@ async def test_invalid_planner_action_is_rejected() -> None:
     planner, _ = build_planner(fake)
 
     with pytest.raises(PlanValidationError, match="version"):
-        await planner.plan(make_incident(), make_observed_state())
+        await planner.plan(make_incident(), make_observed_state(), run_id="run_1")
 
 
 async def test_unsupported_action_family_is_rejected() -> None:
@@ -108,7 +108,7 @@ async def test_unsupported_action_family_is_rejected() -> None:
     planner, _ = build_planner(fake)
 
     with pytest.raises(PlanValidationError):
-        await planner.plan(make_incident(), make_observed_state())
+        await planner.plan(make_incident(), make_observed_state(), run_id="run_1")
 
 
 async def test_planner_retries_are_bounded_and_feed_back_the_problem() -> None:
@@ -117,7 +117,7 @@ async def test_planner_retries_are_bounded_and_feed_back_the_problem() -> None:
     planner, _ = build_planner(fake, max_retries=2)
 
     with pytest.raises(PlanValidationError):
-        await planner.plan(make_incident(), make_observed_state())
+        await planner.plan(make_incident(), make_observed_state(), run_id="run_1")
 
     # exactly max_retries + 1 attempts, never unbounded
     assert len(fake.turn_requests) == 3
@@ -129,7 +129,7 @@ async def test_planner_recovers_on_a_bounded_retry() -> None:
     fake = FakeTrueForge([FakeTurn(output="oops, prose"), FakeTurn(output=json.dumps(VALID_PLAN))])
     planner, _ = build_planner(fake)
 
-    actions = await planner.plan(make_incident(), make_observed_state())
+    actions = await planner.plan(make_incident(), make_observed_state(), run_id="run_1")
 
     assert len(actions) == 3
     assert len(fake.turn_requests) == 2
@@ -167,21 +167,62 @@ async def test_planner_turn_paused_for_approval_fails_closed() -> None:
     planner, _ = build_planner(fake)
 
     with pytest.raises(TurnFailedError, match="planners may not mutate"):
-        await planner.plan(make_incident(), make_observed_state())
+        await planner.plan(make_incident(), make_observed_state(), run_id="run_1")
 
 
 async def test_planner_creates_a_session_binding() -> None:
     fake = FakeTrueForge([FakeTurn(output=json.dumps(VALID_PLAN))])
     planner, bindings = build_planner(fake)
-    planner.bind_run("run_1")
 
-    await planner.plan(make_incident(), make_observed_state())
+    await planner.plan(make_incident(), make_observed_state(), run_id="run_1")
 
     binding = await bindings.get("run_1", SessionPurpose.PLANNER)
     assert binding is not None
     assert binding.trueforge_session_id == "sess_1"
     assert binding.status is SessionStatus.COMPLETED
     assert binding.last_turn_id
+
+
+async def test_planner_binds_the_run_id_it_is_given_not_the_incident_id() -> None:
+    """Regression: a planner session must bind to the run, never to the incident.
+
+    ``run_id`` now arrives through the port, so there is no fallback left to
+    reach for and no binding to copy across afterwards.
+    """
+    fake = FakeTrueForge([FakeTurn(output=json.dumps(VALID_PLAN))])
+    planner, bindings = build_planner(fake)
+    incident = make_incident("incident_7")
+
+    await planner.plan(incident, make_observed_state(), run_id="run_42")
+
+    assert await bindings.get("incident_7", SessionPurpose.PLANNER) is None
+    binding = await bindings.get("run_42", SessionPurpose.PLANNER)
+    assert binding is not None
+    assert binding.world_id is None
+    assert [b.run_id for b in await bindings.list_for_run("run_42")] == ["run_42"]
+
+
+async def test_replanning_the_same_run_does_not_duplicate_its_binding() -> None:
+    """Idempotency: a second planning pass updates the run's binding in place."""
+    fake = FakeTrueForge([FakeTurn(output=json.dumps(VALID_PLAN))] * 2)
+    planner, bindings = build_planner(fake)
+
+    await planner.plan(make_incident(), make_observed_state(), run_id="run_42")
+    first = await bindings.get("run_42", SessionPurpose.PLANNER)
+    await planner.plan(make_incident(), make_observed_state(), run_id="run_42")
+    second = await bindings.get("run_42", SessionPurpose.PLANNER)
+
+    assert len(await bindings.list_for_run("run_42")) == 1
+    assert second.created_at == first.created_at
+    assert second.status is SessionStatus.COMPLETED
+
+
+async def test_planner_agent_spec_sends_no_temperature() -> None:
+    """The configured reasoning model rejects ``temperature``; we must not send it."""
+    fake = FakeTrueForge([FakeTurn(output=json.dumps(VALID_PLAN))])
+    planner, _ = build_planner(fake)
+
+    assert "params" not in planner.agent_spec()["model"]
 
 
 async def test_plan_requires_materially_different_levers() -> None:
@@ -194,7 +235,7 @@ async def test_plan_requires_materially_different_levers() -> None:
     planner, _ = build_planner(fake)
 
     with pytest.raises(PlanValidationError, match="materially different|same lever"):
-        await planner.plan(make_incident(), make_observed_state())
+        await planner.plan(make_incident(), make_observed_state(), run_id="run_1")
 
 
 async def test_scale_replicas_are_bounded() -> None:
@@ -204,7 +245,7 @@ async def test_scale_replicas_are_bounded() -> None:
     planner, _ = build_planner(fake)
 
     with pytest.raises(PlanValidationError, match="1-50|between 1 and 50"):
-        await planner.plan(make_incident(), make_observed_state())
+        await planner.plan(make_incident(), make_observed_state(), run_id="run_1")
 
 
 def test_extract_json_object_tolerates_a_code_fence() -> None:

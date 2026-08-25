@@ -26,10 +26,17 @@ class RealityReader(Protocol):
 
 
 class CandidatePlanner(Protocol):
-    """Proposes candidate actions. Proposals are inert; they never execute."""
+    """Proposes candidate actions. Proposals are inert; they never execute.
+
+    ``run_id`` identifies the :class:`~app.domain.runs.models.BranchpointRun`
+    being planned for. Planners that reason with an external agent need it to
+    bind their session to the run, exactly as ``AdversarialTester`` gets it from
+    ``World.run_id``. Without it a planner has no correct run identity to record
+    and could only guess.
+    """
 
     async def plan(
-        self, incident: Incident, observed_state: ObservedState
+        self, incident: Incident, observed_state: ObservedState, *, run_id: str
     ) -> Sequence[CandidateAction]:
         """Return candidate actions worth testing counterfactually."""
         ...

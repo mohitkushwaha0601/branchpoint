@@ -51,7 +51,7 @@ class HeroCandidatePlanner:
     """Deterministic demo planner: always proposes exactly the three hero actions."""
 
     async def plan(
-        self, incident: Incident, observed_state: ObservedState
+        self, incident: Incident, observed_state: ObservedState, *, run_id: str
     ) -> tuple[CandidateAction, ...]:
         """Return the alpha/beta/gamma hero candidate actions, regardless of input.
 

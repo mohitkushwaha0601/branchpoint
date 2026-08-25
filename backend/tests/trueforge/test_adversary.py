@@ -232,11 +232,42 @@ async def test_adversary_cannot_reach_any_mutation_tool() -> None:
     fake = FakeTrueForge([])
     tester, _ = build_tester(fake, engine)
 
-    spec = tester.agent_spec("world_alpha")
+    spec = tester.agent_spec("run_1", "world_alpha")
     enabled = set(spec["mcp_servers"][0]["enable_tools"])
 
     assert enabled == set(DOPPELGANGER_TOOLS)
     assert not enabled & set(DESTRUCTIVE_TOOL_NAMES)
+
+
+async def test_adversary_is_told_the_run_id_its_world_tools_need() -> None:
+    """Regression: every world tool is keyed on ``(run_id, world_id)``.
+
+    The adversary has no tool that lists runs, so a brief naming only the world
+    left it unable to call a single world tool. It then had nothing to reason
+    from but reality and reported no finding — a silent loss of the entire
+    adversarial evidence path.
+    """
+    engine = DemoProductionEngine()
+    world = await executed_world(engine, "world_alpha", ALPHA_ACTION)
+    fake = FakeTrueForge([FakeTurn(output=json.dumps(NO_FINDING))])
+    tester, _ = build_tester(fake, engine)
+
+    instructions = tester.agent_spec(world.run_id, world.world_id)["instructions"]
+    assert world.run_id in instructions
+
+    await tester.attack(world)
+
+    sent = str(fake.turn_requests[0])
+    assert world.run_id in sent
+    assert world.world_id in sent
+
+
+async def test_adversary_agent_spec_sends_no_temperature() -> None:
+    """The configured reasoning model rejects ``temperature``; we must not send it."""
+    engine = DemoProductionEngine()
+    tester, _ = build_tester(FakeTrueForge([]), engine)
+
+    assert "params" not in tester.agent_spec("run_1", "world_alpha")["model"]
 
 
 async def test_adversary_paused_for_approval_fails_closed() -> None:

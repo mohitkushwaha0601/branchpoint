@@ -73,11 +73,17 @@ class ProposedSetup(BaseModel):
 
 
 class ProposedAssertion(BaseModel):
-    """Assertion as proposed by the adversary."""
+    """Assertion as proposed by the adversary.
+
+    ``threshold`` is still parsed so a model that volunteers one is answered
+    with a clear rejection rather than silently having it ignored. It is never
+    the value BRANCHPOINT replays against.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
     kind: str
+    invariant: str | None = None
     check_name: str | None = None
     metric: str | None = None
     threshold: float | None = None
@@ -126,7 +132,7 @@ class TrueForgeAdversarialTester:
         self._mcp_server_name = mcp_server_name
         self._sandbox_enabled = sandbox_enabled
 
-    def agent_spec(self, world_id: str) -> dict:
+    def agent_spec(self, run_id: str, world_id: str) -> dict:
         """Build the inline TrueForge agent spec for one world's adversary.
 
         Subagents are enabled (the DOPPELGÄNGER is delegated to one) and a
@@ -136,8 +142,8 @@ class TrueForgeAdversarialTester:
         cannot apply to it.
         """
         return {
-            "model": {"name": self._model, "params": {"temperature": 0}},
-            "instructions": doppelganger_instructions(world_id),
+            "model": {"name": self._model},
+            "instructions": doppelganger_instructions(run_id, world_id),
             "mcp_servers": [
                 {
                     "name": self._mcp_server_name,
@@ -159,7 +165,9 @@ class TrueForgeAdversarialTester:
         Any failure raises: the orchestrator converts that into an
         ``INCONCLUSIVE`` verdict, never ``SURVIVED``.
         """
-        session_id = await self._client.create_session(self.agent_spec(world.world_id))
+        session_id = await self._client.create_session(
+            self.agent_spec(world.run_id, world.world_id)
+        )
         await self._bindings.upsert(
             run_id=world.run_id,
             world_id=world.world_id,
@@ -253,14 +261,17 @@ class TrueForgeAdversarialTester:
     def _attack_message(self, world: World) -> str:
         action = world.candidate_action
         return (
-            f"Attack counterfactual world `{world.world_id}`.\n\n"
+            f"Attack counterfactual world `{world.world_id}` of run `{world.run_id}`.\n\n"
             f"It applied this proposed action: {action.name} "
             f"(type {action.action_type}, target {action.target.service}, "
             f"parameters {dict(action.parameters)}).\n\n"
-            "Delegate the adversarial investigation to a subagent. That subagent should "
-            "inspect the world with the read-only tools, use its sandbox to test its "
-            "hypothesis against the data it gathers, and report back. Then reply with "
-            "the single JSON object described in your instructions."
+            "Delegate the adversarial investigation to a subagent. Tell that subagent "
+            f'to call every world tool with run_id="{world.run_id}" and '
+            f'world_id="{world.world_id}" — they are keyed on both, and no other '
+            "values are valid. It should inspect the world with the read-only tools, "
+            "use its sandbox to test its hypothesis against the data it gathers, and "
+            "report back. Then reply with the single JSON object described in your "
+            "instructions."
         )
 
     @staticmethod
@@ -286,6 +297,7 @@ class TrueForgeAdversarialTester:
             operation=proposed.operation,
             assertion=CounterexampleAssertion(
                 kind=proposed.assertion.kind,
+                invariant=proposed.assertion.invariant,
                 check_name=proposed.assertion.check_name,
                 metric=proposed.assertion.metric,
                 threshold=proposed.assertion.threshold,

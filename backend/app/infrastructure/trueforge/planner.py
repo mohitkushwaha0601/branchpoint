@@ -248,11 +248,6 @@ class TrueForgeCandidatePlanner:
         self._mcp_server_name = mcp_server_name
         self._read_only_tools = tuple(read_only_tools)
         self._max_retries = max_retries
-        self._run_id: str | None = None
-
-    def bind_run(self, run_id: str) -> None:
-        """Associate this planner with a BRANCHPOINT run before planning."""
-        self._run_id = run_id
 
     def agent_spec(self) -> dict:
         """Build the inline TrueForge agent spec for the planner.
@@ -271,7 +266,7 @@ class TrueForgeCandidatePlanner:
             mcp_server["enable_tools"] = ["@read-only"]
 
         return {
-            "model": {"name": self._model, "params": {"temperature": 0}},
+            "model": {"name": self._model},
             "instructions": PLANNER_INSTRUCTIONS,
             "mcp_servers": [mcp_server],
             "config": {
@@ -282,10 +277,14 @@ class TrueForgeCandidatePlanner:
         }
 
     async def plan(
-        self, incident: Incident, observed_state: ObservedState
+        self, incident: Incident, observed_state: ObservedState, *, run_id: str
     ) -> Sequence[CandidateAction]:
-        """Run a TrueForge planning session and return validated candidate actions."""
-        run_id = self._run_id or incident.incident_id
+        """Run a TrueForge planning session and return validated candidate actions.
+
+        ``run_id`` is the real ``BranchpointRun.run_id`` supplied by the
+        orchestrator, so the planner session binds to the same run the world
+        adversaries bind to.
+        """
         session_id = await self._client.create_session(self.agent_spec())
         await self._bindings.upsert(
             run_id=run_id,

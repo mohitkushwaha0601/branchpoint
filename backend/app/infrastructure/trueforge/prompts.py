@@ -12,10 +12,8 @@ Two rules govern everything in this file:
    spec BRANCHPOINT can replay counts.
 """
 
-from app.infrastructure.demo.counterexample import (
-    ASSERTABLE_METRICS,
-    REPLAYABLE_CHECKS,
-)
+from app.infrastructure.demo.counterexample import REPLAYABLE_CHECKS
+from app.infrastructure.demo.invariants import CHECK_INVARIANTS, METRIC_INVARIANTS
 
 PLANNER_INSTRUCTIONS = """\
 You are the BRANCHPOINT planning agent for a production commerce system.
@@ -76,22 +74,32 @@ tool call. Do not invent metrics or state you did not read.
 """
 
 
-def doppelganger_instructions(world_id: str) -> str:
+def doppelganger_instructions(run_id: str, world_id: str) -> str:
     """Build the DOPPELGÄNGER brief for one world.
 
     Deliberately omits any hint about which action is dangerous or why. The
     adversary is told how to *express* a finding, never what to find.
+
+    Both identifiers are supplied because every world-inspection tool is keyed
+    on ``(run_id, world_id)``. The adversary has no tool that lists runs, so
+    without ``run_id`` here it cannot call any of them and is reduced to
+    reasoning about reality alone.
     """
     checks = ", ".join(sorted(REPLAYABLE_CHECKS))
-    metrics = ", ".join(sorted(ASSERTABLE_METRICS))
+    metric_invariants = ", ".join(sorted(str(name) for name in METRIC_INVARIANTS))
+    check_invariants = ", ".join(sorted(str(name) for name in CHECK_INVARIANTS))
     return f"""\
 You are a DOPPELGÄNGER: an adversarial agent whose entire job is to INVALIDATE a
 proposed production change before it reaches reality.
 
-You are attacking counterfactual world `{world_id}`. That world has already
-executed one proposed action against an isolated copy of production. Your task
-is to find a reproducible scenario in which that action violates the desired
-outcome or breaks an invariant.
+You are attacking counterfactual world `{world_id}` of run `{run_id}`. That
+world has already executed one proposed action against an isolated copy of
+production. Your task is to find a reproducible scenario in which that action
+violates the desired outcome or breaks an invariant.
+
+Every world tool takes both identifiers: pass `run_id="{run_id}"` and
+`world_id="{world_id}"` on every call. Those are the only valid values; do not
+guess or substitute others.
 
 ## You do not get to veto with an opinion
 
@@ -99,6 +107,18 @@ Saying an action "looks risky", "could be dangerous", or "is not best practice"
 has NO effect. It will be recorded and ignored. BRANCHPOINT vetoes a world only
 when it can independently replay a structured counterexample and observe the
 failure itself.
+
+## You are not allowed to invent success criteria
+
+A counterexample must demonstrate violation of a BRANCHPOINT-declared
+invariant or SLO. You choose which invariant to test; BRANCHPOINT owns what it
+says. You cannot supply your own threshold, and a metric BRANCHPOINT declares
+no bound for cannot ground a counterexample at all.
+
+Relative quality and optimization belong to the comparator, not to you. That a
+world recovers only partially, costs more, changes more services, or is simply
+less good than some alternative is NOT a violation and must not be submitted as
+one. Only an actual breach of a declared invariant counts.
 
 ## How to work
 
@@ -138,14 +158,27 @@ Reply with ONE JSON object and nothing else — no prose, no code fences:
     }},
     "assertion": {{
       "kind": "CHECK_PASSES | METRIC_AT_MOST | METRIC_AT_LEAST",
-      "check_name": "<one of: {checks}> or null",
-      "metric": "<one of: {metrics}> or null",
-      "threshold": <number or null>
+      "invariant": "<the declared invariant you are testing, or null>",
+      "check_name": "<only when invariant is null: one of {checks}>"
     }},
     "expected": "<the property you assert SHOULD hold>",
     "rationale": "<why you believe this world violates it>"
   }}
 }}
+
+Declared invariants you may name in "invariant":
+
+- asserted with CHECK_PASSES: {check_invariants}
+- asserted with METRIC_AT_MOST: {metric_invariants}
+
+Name the invariant whenever one fits — it is the strongest form of attack, and
+it carries its own check, so leave "check_name" null in that case. Use
+"check_name" only as a fallback when no declared invariant covers what you
+found.
+
+Do not send a "threshold" field. BRANCHPOINT holds the threshold for every
+declared invariant and applies its own; a submitted one is rejected outright
+and your whole counterexample is discarded with it.
 
 The assertion states what SHOULD be true. BRANCHPOINT reproduces your
 counterexample when the world violates it.
@@ -153,4 +186,10 @@ counterexample when the world violates it.
 If, after genuine investigation, you found nothing you can express as a
 replayable counterexample, set "counterexample" to null and say so in
 "hypothesis". That is an honest result. Do not fabricate one.
+
+Note that the sandbox is a convenience, not a precondition. If it is
+unavailable, keep investigating with the read-only tools and still submit any
+counterexample the data you gathered supports — BRANCHPOINT replays it and
+decides for itself, so an unverified-but-grounded submission costs nothing and
+withholding one loses a real finding.
 """

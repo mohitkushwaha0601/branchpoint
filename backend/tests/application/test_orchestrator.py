@@ -92,6 +92,34 @@ def build_orchestrator(
     return orchestrator, repository, events
 
 
+async def test_planner_is_given_the_real_run_id() -> None:
+    """Regression: the planner must receive ``BranchpointRun.run_id``, not the incident id.
+
+    A planner that binds an external session needs run identity. When the port
+    did not carry it, the TrueForge planner fell back to ``incident_id`` and its
+    session bound to a run that did not exist, so no PLANNER binding was ever
+    listed for the real run.
+    """
+    planner = StubPlanner((make_action("action_1"),))
+    repository = InMemoryRunRepository()
+    orchestrator = BranchpointOrchestrator(
+        repository=repository,
+        events=InMemoryEventSink(),
+        reality_reader=StubRealityReader(make_observed_state()),
+        planner=planner,
+        clock=lambda: FIXED_TIME,
+        id_factory=SequentialIds(),
+    )
+    incident = make_incident()
+
+    run = await orchestrator.create_run(incident)
+    await orchestrator.observe(run.run_id)
+    await orchestrator.plan(run.run_id)
+
+    assert planner.planned_run_ids == [run.run_id]
+    assert run.run_id != incident.incident_id
+
+
 async def test_happy_path_reaches_succeeded() -> None:
     mutator = RecordingMutator()
     orchestrator, repository, events = build_orchestrator(mutator=mutator)

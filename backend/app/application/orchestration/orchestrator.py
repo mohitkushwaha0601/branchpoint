@@ -108,7 +108,9 @@ class BranchpointOrchestrator:
 
         run = await self._store(run.transition_to(RunStatus.PLANNING, at=self._clock()))
         candidates = await self._guard(
-            run, "planning failed", lambda: planner.plan(run.incident, observed)
+            run,
+            "planning failed",
+            lambda: planner.plan(run.incident, observed, run_id=run.run_id),
         )
         if not candidates:
             run = await self._store(run.transition_to(RunStatus.REJECTED, at=self._clock()))

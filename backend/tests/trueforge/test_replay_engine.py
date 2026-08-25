@@ -136,7 +136,8 @@ def test_arbitrary_metric_names_are_rejected(metric: str) -> None:
         validate_spec(spec)
 
 
-def test_metric_assertion_requires_a_threshold() -> None:
+def test_metric_assertion_needs_no_threshold_from_the_attacker() -> None:
+    """BRANCHPOINT supplies the bound, so omitting one is the expected shape."""
     spec = compatibility_spec().model_copy(
         update={
             "operation": CounterexampleOperation.ASSERT_METRIC,
@@ -146,8 +147,9 @@ def test_metric_assertion_requires_a_threshold() -> None:
         }
     )
 
-    with pytest.raises(SpecValidationError, match="threshold"):
-        validate_spec(spec)
+    validate_spec(spec)
+
+    assert reproduce(spec, GAMMA).reproduced is True
 
 
 def test_replay_surface_is_a_closed_allowlist() -> None:

@@ -19,6 +19,15 @@ from pydantic import Field
 
 from app.domain.evidence.models import Evidence, EvidenceKind, EvidenceSeverity
 from app.domain.primitives import new_id, utc_now
+from app.infrastructure.demo.invariants import (
+    CHECK_INVARIANTS,
+    METRIC_INVARIANTS,
+    CheckInvariant,
+    DeclaredInvariant,
+    MetricBound,
+    MetricInvariant,
+    metric_invariant_for,
+)
 from app.infrastructure.demo.metrics import compute_metrics
 from app.infrastructure.demo.state import DemoModel, DemoProductionState, OrderRecord
 from app.infrastructure.demo.workload import (
@@ -122,9 +131,16 @@ class OrderSelector(DemoModel):
 
 
 class CounterexampleAssertion(DemoModel):
-    """The property the attacker claims should hold."""
+    """The property the attacker claims should hold.
+
+    ``invariant`` names a BRANCHPOINT-declared invariant. For a numeric
+    assertion it is the only way to obtain a threshold: ``threshold`` is not an
+    input BRANCHPOINT trusts, and is accepted only when it restates the
+    declared value exactly. See :mod:`app.infrastructure.demo.invariants`.
+    """
 
     kind: AssertionKind
+    invariant: DeclaredInvariant | None = None
     check_name: str | None = None
     metric: str | None = None
     threshold: float | None = None
@@ -180,6 +196,89 @@ _SELF_ASSERTING_OPERATIONS: frozenset[CounterexampleOperation] = frozenset(
 )
 
 
+_BOUND_TO_ASSERTION_KIND: dict[MetricBound, AssertionKind] = {
+    MetricBound.AT_MOST: AssertionKind.METRIC_AT_MOST,
+    MetricBound.AT_LEAST: AssertionKind.METRIC_AT_LEAST,
+}
+
+
+def resolve_metric_invariant(assertion: CounterexampleAssertion) -> MetricInvariant:
+    """Resolve a numeric assertion onto the declared invariant that governs it.
+
+    This is where an invented success criterion dies. The attacker may say
+    *which* invariant to test, by name or by the metric it constrains, but the
+    threshold and its direction come from the registry. A metric BRANCHPOINT
+    declares no bound for cannot be asserted at all, and a submitted threshold
+    that disagrees with the declared one is rejected rather than quietly
+    replaced — a spec that means something different from what was written
+    should not be replayed as though it did not.
+    """
+    if assertion.invariant is not None:
+        if assertion.invariant not in METRIC_INVARIANTS:
+            raise SpecValidationError(
+                f"invariant {assertion.invariant} is not a metric bound; assert it with "
+                f"{AssertionKind.CHECK_PASSES} instead of {assertion.kind}"
+            )
+        definition = METRIC_INVARIANTS[assertion.invariant]
+        if assertion.metric is not None and assertion.metric != definition.metric:
+            raise SpecValidationError(
+                f"invariant {assertion.invariant} constrains {definition.metric!r}, "
+                f"not {assertion.metric!r}"
+            )
+    else:
+        if not assertion.metric:
+            raise SpecValidationError(
+                f"{assertion.kind} requires assertion.invariant or assertion.metric"
+            )
+        if assertion.metric not in ASSERTABLE_METRICS:
+            raise SpecValidationError(
+                f"unknown metric {assertion.metric!r}; "
+                f"assertable metrics are {sorted(ASSERTABLE_METRICS)}"
+            )
+        resolved = metric_invariant_for(assertion.metric)
+        if resolved is None:
+            raise SpecValidationError(
+                f"BRANCHPOINT declares no threshold for {assertion.metric!r}, so it cannot "
+                "ground a counterexample; declared metric invariants are "
+                f"{sorted(str(name) for name in METRIC_INVARIANTS)}"
+            )
+        definition = resolved
+
+    expected_kind = _BOUND_TO_ASSERTION_KIND[definition.bound]
+    if assertion.kind is not expected_kind:
+        raise SpecValidationError(
+            f"invariant {definition.invariant} binds as {expected_kind}, not {assertion.kind}"
+        )
+    if assertion.threshold is not None and assertion.threshold != definition.threshold:
+        raise SpecValidationError(
+            f"invariant {definition.invariant} is defined by BRANCHPOINT as "
+            f"{definition.metric} {definition.bound} {definition.threshold}; "
+            f"a counterexample may not assert {assertion.threshold} instead"
+        )
+    return definition
+
+
+def resolve_check_invariant(assertion: CounterexampleAssertion) -> CheckInvariant | None:
+    """Resolve a ``CHECK_PASSES`` assertion onto a declared check invariant, if named.
+
+    A named invariant is authoritative and carries its own check, so any
+    ``check_name`` alongside it is redundant decoration and is ignored rather
+    than treated as a conflict. Both fields can only ever name BRANCHPOINT's
+    own checks — neither is a criterion the attacker invented — so rejecting
+    the pair would discard sound findings over a cosmetic mismatch. A
+    threshold is different in kind, and is still refused: it would change what
+    the invariant means.
+    """
+    if assertion.invariant is None:
+        return None
+    if assertion.invariant not in CHECK_INVARIANTS:
+        raise SpecValidationError(
+            f"invariant {assertion.invariant} is a metric bound; assert it with "
+            f"{AssertionKind.METRIC_AT_MOST} or {AssertionKind.METRIC_AT_LEAST}"
+        )
+    return CHECK_INVARIANTS[assertion.invariant]
+
+
 def validate_spec(spec: CounterexampleSpec) -> None:
     """Reject a spec whose operation and assertion cannot be replayed.
 
@@ -196,6 +295,10 @@ def validate_spec(spec: CounterexampleSpec) -> None:
         )
 
     if assertion.kind is AssertionKind.CHECK_PASSES:
+        # A declared invariant names its own check, so it needs no allowlist
+        # lookup and leaves nothing for the attacker to choose.
+        if resolve_check_invariant(assertion) is not None:
+            return
         # ``None`` means "omitted", which the self-asserting operations allow.
         # An explicitly supplied but empty name is malformed, not omitted, and
         # falls through to the allowlist check below.
@@ -210,14 +313,7 @@ def validate_spec(spec: CounterexampleSpec) -> None:
             )
         return
 
-    if not assertion.metric:
-        raise SpecValidationError(f"{assertion.kind} requires assertion.metric")
-    if assertion.metric not in ASSERTABLE_METRICS:
-        raise SpecValidationError(
-            f"unknown metric {assertion.metric!r}; assertable metrics are {sorted(ASSERTABLE_METRICS)}"
-        )
-    if assertion.threshold is None:
-        raise SpecValidationError(f"{assertion.kind} requires assertion.threshold")
+    resolve_metric_invariant(assertion)
 
 
 def _compatibility_check(spec: CounterexampleSpec, state: DemoProductionState) -> CheckResult:
@@ -266,31 +362,36 @@ def _compatibility_check(spec: CounterexampleSpec, state: DemoProductionState) -
 
 
 def _metric_check(spec: CounterexampleSpec, state: DemoProductionState) -> CheckResult:
-    """Replay a metric assertion against the world's derived metrics."""
+    """Replay a metric assertion against the world's derived metrics.
+
+    The bound applied is the declared one, resolved from the registry — never a
+    threshold carried on the spec.
+    """
+    definition = resolve_metric_invariant(spec.assertion)
     metrics = compute_metrics(state)
-    assertion = spec.assertion
-    if assertion.metric is None or assertion.threshold is None:
-        raise SpecValidationError(f"{assertion.kind} requires assertion.metric and threshold")
-    value = float(getattr(metrics, assertion.metric))
-    if assertion.kind is AssertionKind.METRIC_AT_MOST:
-        passed = value <= assertion.threshold
-        comparison = f"<= {assertion.threshold}"
+    value = float(getattr(metrics, definition.metric))
+    if definition.bound is MetricBound.AT_MOST:
+        passed = value <= definition.threshold
+        comparison = f"<= {definition.threshold}"
     else:
-        passed = value >= assertion.threshold
-        comparison = f">= {assertion.threshold}"
+        passed = value >= definition.threshold
+        comparison = f">= {definition.threshold}"
 
     return CheckResult(
-        name=f"assert_{assertion.metric}",
+        name=f"assert_{definition.invariant}".lower(),
         passed=passed,
-        expected=f"{assertion.metric} {comparison}",
-        observed=f"{assertion.metric} = {value}",
+        expected=f"{definition.metric} {comparison} ({definition.invariant})",
+        observed=f"{definition.metric} = {value}",
         severity=CheckSeverity.INFO if passed else CheckSeverity.HIGH,
-        details="metric derived deterministically from world state",
+        details=f"{definition.description}; threshold declared by BRANCHPOINT",
     )
 
 
 def _named_check(spec: CounterexampleSpec, state: DemoProductionState) -> CheckResult:
-    """Replay one of the named deterministic workload checks."""
+    """Replay a declared check invariant, or one of the named workload checks."""
+    declared = resolve_check_invariant(spec.assertion)
+    if declared is not None:
+        return declared.check(state)
     check_name = spec.assertion.check_name
     if check_name is None:
         raise SpecValidationError(f"{spec.operation} requires assertion.check_name")
