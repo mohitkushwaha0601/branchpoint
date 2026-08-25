@@ -168,7 +168,7 @@ uv run uvicorn app.main:app --port 8000     npx @truefoundry/trueforge@0.1.4
 ../trueforge/scripts/setup_trueforge.sh
 # 5. sandbox (optional; TrueForge has a local fallback)
 # 6. start an agent run
-export BRANCHPOINT_TRUEFORGE_MODEL="anthropic/<model-id>"
+export BRANCHPOINT_MODEL="<provider>/<model-id>"   # one model for every agent
 curl -X POST localhost:8000/api/v1/agent-runs -H 'content-type: application/json' \
   -d '{"objective":"Fix the checkout production incident."}'
 ```

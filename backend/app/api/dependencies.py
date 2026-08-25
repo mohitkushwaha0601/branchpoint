@@ -31,9 +31,8 @@ from app.infrastructure.demo.hero import HeroAdversarialTester, HeroCandidatePla
 from app.infrastructure.persistence.memory import InMemoryEventSink, InMemoryRunRepository
 from app.infrastructure.trueforge.adversary import TrueForgeAdversarialTester
 from app.infrastructure.trueforge.client import TrueForgeClient
-from app.infrastructure.trueforge.planner import TrueForgeCandidatePlanner
+from app.infrastructure.trueforge.planner import PLANNER_TOOLS, TrueForgeCandidatePlanner
 from app.infrastructure.trueforge.sessions import InMemorySessionBindingStore
-from app.mcp.server import READ_ONLY_TOOL_NAMES
 
 
 @lru_cache
@@ -110,6 +109,10 @@ def build_agent_orchestrator() -> BranchpointOrchestrator:
     from app.core.config import get_settings
 
     settings = get_settings()
+    # Resolved once, here, and handed to both agents: the planner and every
+    # DOPPELGÄNGER in a run always speak to the same model. Neither adapter
+    # reads the environment itself.
+    model = settings.resolve_model()
     engine = get_demo_engine()
     capability_store = get_capability_store()
     client = get_trueforge_client()
@@ -121,16 +124,16 @@ def build_agent_orchestrator() -> BranchpointOrchestrator:
         reality_reader=DemoRealityReader(engine),
         planner=TrueForgeCandidatePlanner(
             client,
-            model=settings.trueforge_model,
+            model=model,
             bindings=bindings,
             mcp_server_name=settings.trueforge_mcp_server_name,
-            read_only_tools=READ_ONLY_TOOL_NAMES,
+            read_only_tools=PLANNER_TOOLS,
         ),
         world_executor=DemoWorldExecutor(engine),
         adversarial_tester=TrueForgeAdversarialTester(
             client,
             engine,
-            model=settings.trueforge_model,
+            model=model,
             bindings=bindings,
             mcp_server_name=settings.trueforge_mcp_server_name,
             sandbox_enabled=settings.trueforge_sandbox_enabled,

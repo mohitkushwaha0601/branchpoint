@@ -7,6 +7,7 @@ import pytest
 from app.domain.actions.models import ActionType, CandidateAction
 from app.infrastructure.trueforge.errors import PlanValidationError, TurnFailedError
 from app.infrastructure.trueforge.planner import (
+    PLANNER_TOOLS,
     TrueForgeCandidatePlanner,
     extract_json_object,
 )
@@ -15,7 +16,7 @@ from app.infrastructure.trueforge.sessions import (
     SessionPurpose,
     SessionStatus,
 )
-from app.mcp.server import DESTRUCTIVE_TOOL_NAMES, READ_ONLY_TOOL_NAMES
+from app.mcp.server import DESTRUCTIVE_TOOL_NAMES
 from tests.factories import make_incident, make_observed_state
 from tests.trueforge.fake_transport import FakeTrueForge, FakeTurn
 
@@ -68,7 +69,7 @@ def build_planner(
         fake.client(),
         model="fake/model",
         bindings=bindings,
-        read_only_tools=READ_ONLY_TOOL_NAMES,
+        read_only_tools=PLANNER_TOOLS,
         **kwargs,
     )
     return planner, bindings
@@ -143,7 +144,7 @@ async def test_planner_cannot_reach_any_mutation_tool() -> None:
     spec = planner.agent_spec()
     enabled = set(spec["mcp_servers"][0]["enable_tools"])
 
-    assert enabled == set(READ_ONLY_TOOL_NAMES)
+    assert enabled == set(PLANNER_TOOLS)
     assert not enabled & set(DESTRUCTIVE_TOOL_NAMES)
     assert spec["config"]["sandbox"]["enabled"] is False
 

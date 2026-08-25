@@ -16,6 +16,17 @@ except PackageNotFoundError:
     APP_VERSION = "0.0.0"
 
 
+class ModelNotConfiguredError(RuntimeError):
+    """Raised when no model FQN is configured for BRANCHPOINT's agents."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "no model configured; set BRANCHPOINT_MODEL to a fully-qualified model name "
+            "that TrueForge has a provider for (e.g. anthropic/claude-sonnet-4-5). "
+            "The provider's API key belongs in TrueForge, never in BRANCHPOINT."
+        )
+
+
 class Settings(BaseSettings):
     """Runtime settings loaded from BRANCHPOINT-prefixed variables."""
 
@@ -37,13 +48,26 @@ class Settings(BaseSettings):
     """
     trueforge_base_url: str = "http://localhost:8790"
     """Base URL of the TrueForge harness (``BRANCHPOINT_TRUEFORGE_BASE_URL``)."""
-    trueforge_model: str = ""
-    """Model FQN TrueForge should use, e.g. ``anthropic/claude-sonnet-4-5``.
+    model: str = ""
+    """The one model every BRANCHPOINT agent runs on (``BRANCHPOINT_MODEL``).
 
-    Empty by default: BRANCHPOINT never hardwires a provider. Set
-    ``BRANCHPOINT_TRUEFORGE_MODEL`` to whichever model the operator configured
-    in TrueForge. The provider's API key lives in TrueForge, never here — this
-    backend holds no model credentials.
+    A fully-qualified name TrueForge understands, e.g. ``anthropic/claude-sonnet-4-5``.
+    BRANCHPOINT treats the string as **opaque**: it is never parsed, split on
+    ``/``, or checked against a provider list — whatever is configured here is
+    handed to TrueForge verbatim.
+
+    Empty by default: BRANCHPOINT never hardwires a provider, and holds no
+    model credentials. The provider's API key lives in TrueForge.
+
+    There is deliberately no per-role model variable. Planner and DOPPELGÄNGER
+    resolve the same string, so a run cannot silently mix models.
+    """
+    trueforge_model: str = ""
+    """Deprecated alias for :attr:`model` (``BRANCHPOINT_TRUEFORGE_MODEL``).
+
+    Still honoured so existing deployments keep working, but only when
+    ``BRANCHPOINT_MODEL`` is unset. Resolution order lives in
+    :meth:`resolve_model`.
     """
     trueforge_mcp_server_name: str = "branchpoint"
     """Name BRANCHPOINT is registered under in TrueForge's MCP settings."""
@@ -59,6 +83,23 @@ class Settings(BaseSettings):
     ``app.infrastructure.demo``, which works regardless of how the package was
     installed. Set this only to point at a different scenario file.
     """
+
+    def resolve_model(self) -> str:
+        """Return the single model FQN every TrueForge-backed agent must use.
+
+        ``BRANCHPOINT_MODEL`` wins; ``BRANCHPOINT_TRUEFORGE_MODEL`` is the
+        legacy fallback; neither configured is a configuration error rather
+        than a silent default, because guessing a provider on an operator's
+        behalf is how a run ends up on a model nobody chose.
+
+        The resolved value is returned as configured (whitespace trimmed only)
+        — BRANCHPOINT never interprets it.
+        """
+        for configured in (self.model, self.trueforge_model):
+            resolved = configured.strip()
+            if resolved:
+                return resolved
+        raise ModelNotConfiguredError
 
     @property
     def is_production(self) -> bool:

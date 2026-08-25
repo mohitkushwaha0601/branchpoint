@@ -95,6 +95,9 @@ async def test_tools_list_succeeds(mcp_harness: MCPTestHarness) -> None:
     assert READ_TOOL_NAMES <= names
     assert DESTRUCTIVE_TOOL_NAMES <= names
     assert len(result.tools) == len(READ_TOOL_NAMES) + len(DESTRUCTIVE_TOOL_NAMES)
+    # The canonical inventory is 17 tools. Role-specific agent tool sets narrow
+    # what an agent sees; they never narrow what the server exposes.
+    assert len(result.tools) == 17
 
 
 async def test_every_tool_has_explicit_annotations(mcp_harness: MCPTestHarness) -> None:

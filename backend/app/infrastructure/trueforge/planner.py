@@ -45,6 +45,25 @@ from app.infrastructure.trueforge.sessions import (
     SessionStatus,
 )
 
+#: Reality-inspection tools the planner may use — a deliberate least-privilege
+#: subset of :data:`app.mcp.server.READ_ONLY_TOOL_NAMES`, not the whole
+#: read-only inventory. The planner diagnoses *reality* and proposes candidate
+#: actions; counterfactual worlds do not exist yet when it runs, so every
+#: world-inspection tool and ``branchpoint_reproduce_counterexample`` are
+#: withheld. Withholding them is also what keeps the planner spec portable:
+#: the reproduction tool's ``CounterexampleSpec`` input schema uses a nested
+#: ``$defs`` reference that Google's function-declaration conversion rejects
+#: outright, so a planner handed the full inventory cannot run on Gemini.
+PLANNER_TOOLS: tuple[str, ...] = (
+    "branchpoint_get_incident",
+    "branchpoint_get_metrics",
+    "branchpoint_get_deployment",
+    "branchpoint_get_feature_flags",
+    "branchpoint_get_schema",
+    "branchpoint_get_orders_summary",
+    "branchpoint_get_reality_state",
+)
+
 #: Bounded formatting/validation retries. Small and deterministic by design.
 MAX_PLAN_RETRIES = 2
 
@@ -239,7 +258,7 @@ class TrueForgeCandidatePlanner:
         model: str,
         bindings: InMemorySessionBindingStore,
         mcp_server_name: str = "branchpoint",
-        read_only_tools: Sequence[str] = (),
+        read_only_tools: Sequence[str] = PLANNER_TOOLS,
         max_retries: int = MAX_PLAN_RETRIES,
     ) -> None:
         self._client = client
@@ -252,8 +271,10 @@ class TrueForgeCandidatePlanner:
     def agent_spec(self) -> dict:
         """Build the inline TrueForge agent spec for the planner.
 
-        Only read-only BRANCHPOINT tools are exposed, by literal name. The
-        planner has no sandbox and no path to any mutation tool.
+        Only the planner's own reality-inspection tools are exposed, by literal
+        name — see :data:`PLANNER_TOOLS`. The planner has no sandbox, no path to
+        any mutation tool, and no path to world inspection or counterexample
+        reproduction.
         """
         mcp_server: dict = {
             "name": self._mcp_server_name,

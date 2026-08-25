@@ -16,9 +16,8 @@ from app.infrastructure.demo.adapters import DemoRealityReader, DemoWorldExecuto
 from app.infrastructure.demo.engine import DemoProductionEngine
 from app.infrastructure.persistence.memory import InMemoryEventSink, InMemoryRunRepository
 from app.infrastructure.trueforge.adversary import TrueForgeAdversarialTester
-from app.infrastructure.trueforge.planner import TrueForgeCandidatePlanner
+from app.infrastructure.trueforge.planner import PLANNER_TOOLS, TrueForgeCandidatePlanner
 from app.infrastructure.trueforge.sessions import InMemorySessionBindingStore, SessionPurpose
-from app.mcp.server import READ_ONLY_TOOL_NAMES
 from tests.factories import make_incident
 from tests.trueforge.fake_transport import FakeTrueForge, FakeTurn
 from tests.trueforge.test_planner import VALID_PLAN
@@ -51,7 +50,7 @@ def build_service(
             client,
             model="fake/model",
             bindings=bindings,
-            read_only_tools=READ_ONLY_TOOL_NAMES,
+            read_only_tools=PLANNER_TOOLS,
         ),
         world_executor=DemoWorldExecutor(engine),
         adversarial_tester=TrueForgeAdversarialTester(

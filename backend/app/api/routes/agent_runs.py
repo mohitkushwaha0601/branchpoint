@@ -20,7 +20,7 @@ from app.api.dependencies import (
     build_agent_orchestrator,
 )
 from app.application.orchestration.agent_run import AgentRunService
-from app.core.config import Settings, get_settings
+from app.core.config import ModelNotConfiguredError, Settings, get_settings
 from app.domain.comparison.models import ComparisonResult
 from app.domain.incidents.models import Incident, IncidentSeverity
 from app.domain.primitives import new_id, utc_now
@@ -201,14 +201,14 @@ async def start_agent_run(
     Nothing in reality has changed.
     """
     settings: Settings = get_settings()
-    if not settings.trueforge_model:
+    try:
+        # Called for its check: a run must not start half-configured. The same
+        # resolution runs again inside ``build_agent_orchestrator``.
+        settings.resolve_model()
+    except ModelNotConfiguredError as exc:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "no TrueForge model configured; set BRANCHPOINT_TRUEFORGE_MODEL to a model "
-                "FQN that TrueForge has a provider for (e.g. anthropic/claude-sonnet-4-5)"
-            ),
-        )
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
 
     service = AgentRunService(
         orchestrator=build_agent_orchestrator(), events=events, bindings=bindings
