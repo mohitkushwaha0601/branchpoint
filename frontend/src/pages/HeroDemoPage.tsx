@@ -26,8 +26,12 @@ export function HeroDemoPage() {
       <WorkspaceLayout
         canvas={
           <>
-            <p className="border-b border-edge bg-raised px-5 py-1.5 font-mono text-[10px] tracking-[0.1em] text-warn">
-              FIXTURE — not a live run
+            <p
+              role="note"
+              className="border-b border-warn-dim bg-warn/10 px-5 py-1.5 font-mono text-[10px] tracking-[0.1em] text-warn"
+            >
+              DEMO FIXTURE · Not a live TrueForge execution — the live path is
+              /runs
             </p>
             <RunHeader run={heroRun} />
             <StageRail stages={heroRun.stages} />

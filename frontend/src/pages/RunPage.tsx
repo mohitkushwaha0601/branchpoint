@@ -17,6 +17,7 @@ import { EventDrawer } from "../components/events/EventDrawer";
 import { BranchGraph } from "../components/graph/BranchGraph";
 import { InspectorPanel } from "../components/inspector/InspectorPanel";
 import { RunHeader } from "../components/run/RunHeader";
+import { StartRunButton } from "../components/run/StartRunButton";
 import { StageRail } from "../components/run/StageRail";
 import { RunSidebar } from "../components/shell/RunSidebar";
 import { ActivityDot, ErrorBanner } from "../components/shell/StatusStrip";
@@ -32,8 +33,12 @@ export function RunPage() {
   // Re-read the list whenever the run's status changes, so the sidebar follows.
   const { runs } = useRunList(run?.status);
   // The harness trace changes only when the harness does something, so it is
-  // keyed on the run's status rather than re-fetched on every poll tick.
-  const harness = useHarnessTrace(runId, run?.status);
+  // keyed on the run's status rather than re-fetched on every poll tick. It is
+  // also not asked for until the run itself has loaded: a trace describes a
+  // run's sessions, and there is nothing to describe before the run resolves —
+  // or ever, if it 404s.
+  const runIsMissing = error?.isNotFound ?? false;
+  const harness = useHarnessTrace(run === null ? undefined : runId, run?.status);
   const [inspectorOpen, setInspectorOpen] = useState(false);
 
   const sidebar = <RunSidebar runs={runs} currentRunId={runId} />;
@@ -43,26 +48,28 @@ export function RunPage() {
       <WorkspaceLayout
         sidebar={sidebar}
         canvas={
-          <>
-            {error !== null ? (
-              <ErrorBanner
-                title={
-                  error.isUnreachable
-                    ? "BRANCHPOINT backend unreachable"
-                    : error.isNotFound
-                      ? `Run ${runId} not found`
+          runIsMissing ? (
+            <LostRun runId={runId} />
+          ) : (
+            <>
+              {error !== null ? (
+                <ErrorBanner
+                  title={
+                    error.isUnreachable
+                      ? "BRANCHPOINT backend unreachable"
                       : "Could not load this run"
-                }
-                detail={error.isUnreachable ? undefined : error.detail}
-                onRetry={refresh}
-              />
-            ) : null}
-            <div className="px-5 py-5">
-              {loading && error === null ? (
-                <ActivityDot label="LOADING RUN" />
+                  }
+                  detail={error.isUnreachable ? undefined : error.detail}
+                  onRetry={refresh}
+                />
               ) : null}
-            </div>
-          </>
+              <div className="px-5 py-5">
+                {loading && error === null ? (
+                  <ActivityDot label="LOADING RUN" />
+                ) : null}
+              </div>
+            </>
+          )
         }
       />
     );
@@ -105,6 +112,32 @@ export function RunPage() {
         drawer={<EventDrawer harness={harness} />}
       />
     </RunViewProvider>
+  );
+}
+
+/**
+ * A run the backend no longer knows about.
+ *
+ * Almost always a restart: this build keeps active runs in process memory, so
+ * the honest thing is to say that rather than offer a Retry that cannot
+ * succeed. Nothing is polled from here — the 404 is authoritative and final.
+ */
+function LostRun({ runId }: { runId: string | undefined }) {
+  return (
+    <div className="px-5 py-6">
+      <h2 className="text-[15px] font-semibold text-fg">Run no longer exists</h2>
+      <code className="mt-1 block font-mono text-[11px] text-fg-faint">
+        {runId}
+      </code>
+      <p className="mt-3 max-w-xl text-[12px] leading-relaxed text-fg-dim">
+        This hackathon build stores active BRANCHPOINT runs in process memory,
+        so a backend restart ends them. Nothing was committed and reality is
+        unchanged.
+      </p>
+      <div className="mt-4">
+        <StartRunButton />
+      </div>
+    </div>
   );
 }
 

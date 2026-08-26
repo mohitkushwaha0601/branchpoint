@@ -199,6 +199,9 @@ export function EventDrawer({ harness }: { harness?: HarnessTraceState }) {
               type="button"
               role="tab"
               aria-selected={tab === name}
+              // Names the region each tab governs, so a screen reader can move
+              // from the tab to its content rather than hunting for it.
+              aria-controls="event-drawer-body"
               onClick={() => {
                 setTab(name);
                 setExpanded(true);

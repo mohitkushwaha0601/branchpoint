@@ -306,7 +306,11 @@ export function adaptRun({
     approval: approvalFor(run, adaptedWorlds),
     events: events === null ? [] : adaptEvents(events),
     rejectionReason: run.approval?.status === "REJECTED" ? run.approval.reason : "",
-    realityCommitted: run.commit_status === "SUCCEEDED",
+    // Both halves required. A successful commit says the mutation was issued;
+    // only independent verification says reality actually reads that way, and
+    // the header claims a change on the strength of the second.
+    realityCommitted:
+      run.commit_status === "SUCCEEDED" && run.verification_status === "PASSED",
     commitStatus: run.commit_status,
     verificationStatus: run.verification_status,
     failureReason: run.failure_reason,

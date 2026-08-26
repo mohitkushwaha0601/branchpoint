@@ -13,7 +13,7 @@
  */
 
 import { AlertTriangle, Check, Diamond, Loader, UserX, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useRunView } from "../../app/runView";
 import type { Run } from "../../types/run";
@@ -118,6 +118,12 @@ export function ApprovalGate() {
   // the reason belongs next to what is being refused.
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  // Opening the panel is a request for input, so the caret goes there rather
+  // than leaving a keyboard user to find it.
+  const reasonRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (rejecting) reasonRef.current?.focus();
+  }, [rejecting]);
   const { approval } = run;
   const world = run.worlds.find((candidate) => candidate.worldId === approval.worldId);
 
@@ -138,7 +144,7 @@ export function ApprovalGate() {
           id="approval-heading"
           className="font-mono text-[11px] font-semibold tracking-[0.12em] text-gate"
         >
-          {pending ? "MANUAL APPROVAL REQUIRED" : "HUMAN APPROVAL"}
+          {pending ? "HUMAN CHECKPOINT" : "HUMAN DECISION"}
         </h2>
       </header>
 
@@ -146,6 +152,11 @@ export function ApprovalGate() {
         <div>
           <p className="font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint">
             RECOMMENDED WORLD
+          </p>
+          {/* Subordinate by construction: the comparator ranks, a person
+              decides. Said in words so the hierarchy survives a screenshot. */}
+          <p className="mt-0.5 text-[11px] text-fg-faint">
+            A deterministic recommendation. Not permission.
           </p>
           <p className="mt-1 text-[13px] text-fg">
             {world.label.replace("WORLD ", "World ")} — {world.name}
@@ -250,6 +261,7 @@ export function ApprovalGate() {
             </label>
             <input
               id="rejection-reason"
+              ref={reasonRef}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               maxLength={500}

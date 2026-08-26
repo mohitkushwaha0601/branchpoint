@@ -128,11 +128,39 @@ curl -X PUT http://localhost:8790/api/v1/settings/skills \
 export BRANCHPOINT_TRUEFORGE_SKILL_NAME=incident-counterfactual-review
 ```
 
-It is **off by default and deliberately so**. Registration is a git clone
-TrueForge performs itself, and naming a skill it has not been given would fail
-at session creation — the one place a failure is least affordable. With the
-variable unset the DOPPELGÄNGER spec carries no `skills` key at all, which is
-exactly the hero path as shipped.
+A `description` may be included in the manifest; the server stores
+`{type, name, url, path, ref, description}` and nothing is read from the file
+itself at registration time.
+
+It is **off by default and deliberately so**, for four reasons found by reading
+the 0.1.4 server bundle rather than assumed:
+
+1. **Registration is a network operation.** TrueForge clones the named repo with
+   its own `git_downloader.py`, so the repo must be public and reachable at
+   registration time. It cannot be performed or verified offline.
+2. **A skill needs a sandbox.** `getSkillsDir()` is called from `createSandbox`
+   and the skill is materialised in the sandbox working directory. So a mounted
+   skill is only usable when `BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED=true` —
+   enabling the skill with the sandbox off mounts something TrueForge cannot
+   place.
+3. **A missing skill stops the turn.** The server's own error text is explicit:
+   a turn "cannot be processed" when "a referenced resource is missing (named
+   agent, model, MCP server, skill, or sandbox provider)". Naming an
+   unregistered skill breaks the run at the least affordable moment.
+4. **Subagent inheritance is unverifiable here.** Whether a model-created
+   subagent inherits its parent's skills is not answerable from this package:
+   `create_sub_agent` appears in the client bundle but the server bundle
+   contains no subagent implementation at all. Attaching the skill to the
+   Compatibility Skeptic specifically would be guesswork.
+
+With `BRANCHPOINT_TRUEFORGE_SKILL_NAME` unset the DOPPELGÄNGER spec carries no
+`skills` key at all — exactly the hero path as shipped. The planner and the
+commit operator never carry one under any setting: they run with the sandbox
+off, and only the adversary's spec builder accepts a skill name.
+
+Whether or not it is mounted, the skill is **exploratory**. It instructs an
+agent on how to look for a counterexample; it cannot make one authoritative,
+and only BRANCHPOINT's deterministic replay produces evidence that can veto.
 
 ## Sessions and resume
 

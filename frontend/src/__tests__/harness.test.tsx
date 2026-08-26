@@ -195,7 +195,7 @@ describe("nothing is invented", () => {
       await screen.findByRole("heading", { level: 1, name: "Checkout Regression" }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: "MANUAL APPROVAL REQUIRED" }),
+      await screen.findByRole("heading", { name: "HUMAN CHECKPOINT" }),
     ).toBeInTheDocument();
   });
 });

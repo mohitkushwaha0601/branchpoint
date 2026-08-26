@@ -284,7 +284,7 @@ describe("fetching", () => {
     expect(panel.getByText("VETOED")).toBeInTheDocument();
     // ...and the rest of the run page still works.
     expect(
-      screen.getByRole("heading", { name: "MANUAL APPROVAL REQUIRED" }),
+      screen.getByRole("heading", { name: "HUMAN CHECKPOINT" }),
     ).toBeInTheDocument();
   });
 

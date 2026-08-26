@@ -12,7 +12,7 @@ describe("approval gate", () => {
     renderFixture();
 
     const gate = screen
-      .getByRole("heading", { name: "MANUAL APPROVAL REQUIRED" })
+      .getByRole("heading", { name: "HUMAN CHECKPOINT" })
       .closest("section");
     expect(gate).not.toBeNull();
 
@@ -37,7 +37,7 @@ describe("approval gate", () => {
     renderFixture();
 
     const gate = within(
-      screen.getByRole("heading", { name: "MANUAL APPROVAL REQUIRED" }).closest("section")!,
+      screen.getByRole("heading", { name: "HUMAN CHECKPOINT" }).closest("section")!,
     );
     expect(gate.getByText("world_beta")).toBeInTheDocument();
     expect(gate.getByText("action_b8e2")).toBeInTheDocument();

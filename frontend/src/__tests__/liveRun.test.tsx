@@ -247,7 +247,7 @@ describe("approval", () => {
     const server = serveSettledRun();
     const view = renderApp(`/runs/${RUN_ID}`);
     await screen.findByRole("heading", { level: 1, name: "Checkout Regression" });
-    await screen.findByRole("heading", { name: "MANUAL APPROVAL REQUIRED" });
+    await screen.findByRole("heading", { name: "HUMAN CHECKPOINT" });
     return { server, ...view };
   }
 
@@ -391,7 +391,7 @@ describe("approval", () => {
       await screen.findByRole("region", { name: "CURRENT REALITY" }),
     );
     expect(await reality.findByText("OFF")).toBeInTheDocument();
-    expect(screen.getByText(/CURRENT REALITY/)).toHaveTextContent("COMMITTED");
+    expect(screen.getByText(/CURRENT REALITY/)).toHaveTextContent("VERIFIED CHANGE");
   });
 
   it("labels reality as unchanged while nothing has been committed", async () => {
@@ -435,10 +435,26 @@ describe("backend unreachable", () => {
     ).toBeInTheDocument();
   });
 
-  it("reports a missing run as not found", async () => {
-    mockServer({});
+  it("explains a missing run instead of offering a retry that cannot work", async () => {
+    const server = mockServer({});
     renderApp("/runs/run_missing");
 
-    expect(await screen.findByText("Run run_missing not found")).toBeInTheDocument();
+    expect(await screen.findByText("Run no longer exists")).toBeInTheDocument();
+    expect(
+      screen.getByText(/stores active BRANCHPOINT runs in process memory/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nothing was committed and reality is\s+unchanged/),
+    ).toBeInTheDocument();
+    // A way forward, not a Retry against a run that is gone. Scoped to the
+    // canvas: the sidebar always carries a start button of its own.
+    const canvas = within(screen.getByRole("main"));
+    expect(canvas.getByRole("button", { name: "Run BRANCHPOINT" })).toBeEnabled();
+    expect(canvas.queryByRole("button", { name: /Retry/ })).not.toBeInTheDocument();
+
+    // The 404 on the run is authoritative: its children are not asked about.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(server.calls.some((call) => call.includes("harness-trace"))).toBe(false);
+    expect(server.calls.some((call) => call.includes("/worlds/"))).toBe(false);
   });
 });

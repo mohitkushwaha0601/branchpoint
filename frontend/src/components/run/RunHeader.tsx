@@ -44,9 +44,10 @@ export function RunHeader({ run }: { run: Run }) {
   const vetoed = run.worlds.filter((w) => w.verdict === "VETOED").length;
   const survivors = run.worlds.filter((w) => w.verdict === "SURVIVED").length;
 
-  // Read live from the reality endpoint. Saying "UNCHANGED" is a claim, so it
-  // is made only while the run has committed nothing.
-  const realityNote = run.realityCommitted ? "COMMITTED" : "UNCHANGED";
+  // Read live from the reality endpoint. Both words are claims: "UNCHANGED"
+  // holds while nothing has been committed, and "VERIFIED CHANGE" is said only
+  // once BRANCHPOINT has re-read reality and confirmed it.
+  const realityNote = run.realityCommitted ? "VERIFIED CHANGE" : "UNCHANGED";
 
   return (
     <div className="border-b border-edge px-5 py-4">

@@ -135,6 +135,9 @@ describe("shell", () => {
   it("marks the offline fixture as a fixture", () => {
     renderFixture();
 
-    expect(screen.getByText(/FIXTURE — not a live run/)).toBeInTheDocument();
+    expect(screen.getByText(/DEMO FIXTURE/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Not a live TrueForge execution/),
+    ).toBeInTheDocument();
   });
 });

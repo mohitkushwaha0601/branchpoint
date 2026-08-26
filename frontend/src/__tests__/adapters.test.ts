@@ -178,7 +178,11 @@ describe("reality", () => {
 
   it("follows reality after a commit turns the flag off", () => {
     const run = adaptRun({
-      run: runDto({ status: "SUCCEEDED", commit_status: "SUCCEEDED" }),
+      run: runDto({
+        status: "SUCCEEDED",
+        commit_status: "SUCCEEDED",
+        verification_status: "PASSED",
+      }),
       demo: demoStateDto(false),
     });
 
@@ -188,6 +192,17 @@ describe("reality", () => {
       value: "1.4%",
     });
     expect(run.realityCommitted).toBe(true);
+  });
+
+  it("does not call reality changed until verification confirms it", () => {
+    // Committed but not yet verified: the mutation was issued, and BRANCHPOINT
+    // has not yet re-read reality to confirm it reads that way.
+    const run = adaptRun({
+      run: runDto({ status: "VERIFYING", commit_status: "SUCCEEDED" }),
+      demo: demoStateDto(false),
+    });
+
+    expect(run.realityCommitted).toBe(false);
   });
 });
 

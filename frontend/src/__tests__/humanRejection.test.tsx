@@ -39,7 +39,7 @@ function serve(run = runDto()) {
 async function openGate() {
   const view = renderApp(`/runs/${RUN_ID}`);
   const gate = await screen.findByRole("heading", {
-    name: /MANUAL APPROVAL REQUIRED|HUMAN APPROVAL/,
+    name: /HUMAN CHECKPOINT|HUMAN DECISION/,
   });
   return { ...view, gate: gate.closest("section")! };
 }
