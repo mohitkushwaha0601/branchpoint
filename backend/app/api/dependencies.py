@@ -21,6 +21,7 @@ from fastapi import Depends
 
 from app.application.orchestration.approval import ApprovalCoordinator
 from app.application.orchestration.orchestrator import BranchpointOrchestrator
+from app.application.orchestration.rejection import HumanRejectionCoordinator
 from app.application.orchestration.task_runner import BackgroundTaskRunner
 from app.infrastructure.demo.adapters import (
     DemoRealityMutator,
@@ -168,6 +169,26 @@ def build_commit_operator() -> TrueForgeCommitOperator:
         model=settings.resolve_model(),
         bindings=get_session_binding_store(),
         mcp_server_name=settings.trueforge_mcp_server_name,
+    )
+
+
+def build_rejection_coordinator() -> HumanRejectionCoordinator:
+    """Build the coordinator behind ``POST /api/v1/runs/{run_id}/rejection``.
+
+    Deliberately *not* :func:`build_approval_coordinator`. That builder eagerly
+    constructs the commit operator, which resolves a model — so routing a
+    refusal through it made declining an action impossible without a configured
+    model provider, even though no refusing code path ever calls one. A
+    fail-closed governance action must not depend on the machinery it exists to
+    decline, so this builder touches none of it: no commit operator, no
+    TrueForge client, no capability store, no model resolution.
+    """
+    repository = get_run_repository()
+    events = get_event_sink()
+    return HumanRejectionCoordinator(
+        orchestrator=get_demo_orchestrator(repository, events),
+        repository=repository,
+        events=events,
     )
 
 

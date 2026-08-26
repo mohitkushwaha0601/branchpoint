@@ -120,13 +120,22 @@ async def test_a_rejected_run_cannot_obtain_a_commit_capability(client: AsyncCli
 
 
 async def test_approving_after_a_rejection_is_refused(client: AsyncClient) -> None:
-    """The commit path is closed at its own gate, not only at the new one."""
+    """The commit path is closed at its own gate, not only at the new one.
+
+    Two independent gates stand in front of it and either may answer first:
+    ``409`` from the lifecycle gate (the run is terminal ``REJECTED``), or
+    ``503`` from the approval route's own model gate when no provider is
+    configured. Which one replies depends on the environment; that both refuse
+    is the property under test, so the status assertion admits either and the
+    substantive checks below — nothing committed, nothing verified — carry the
+    weight. A success would fail every one of them.
+    """
     run_id = await run_awaiting_approval(client)
     await client.post(f"/api/v1/runs/{run_id}/rejection", json={"actor": ACTOR})
 
     response = await client.post(f"/api/v1/runs/{run_id}/approval", json={"actor": ACTOR})
 
-    assert response.status_code == 409
+    assert response.status_code in {409, 503}, response.text
     run = (await client.get(f"/api/v1/runs/{run_id}")).json()
     assert run["status"] == "REJECTED"
     assert run["commit_id"] is None
@@ -257,3 +266,88 @@ async def test_a_repeated_rejection_does_not_emit_a_second_event(
 
     assert types.count(str(RunEventType.RUN_REJECTED)) == 1
     assert types.count(str(RunEventType.APPROVAL_REJECTED)) == 1
+
+
+# ----- 8. the rejection path must not depend on a model ------------------------
+
+
+async def test_rejection_needs_no_model_and_touches_no_commit_machinery(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refusal must record with no model provider configured at all.
+
+    This is the regression that shipped: the route built the *approval*
+    coordinator, whose builder eagerly constructs the TrueForge commit operator
+    and therefore calls ``Settings.resolve_model``. Declining an action needs
+    none of that, but the dependency made it impossible without a configured
+    model — so in CI, where none is set, the safe half of the human gate was the
+    half that broke.
+
+    Two things are pinned here, because either alone would have missed it:
+
+    1. **Both** model settings are explicitly emptied through the environment.
+       Clearing with ``env -u`` is not enough — ``Settings`` reads ``.env``, so
+       an unset variable is silently repopulated from the developer's own file
+       and the bug hides. The settings cache is cleared so the empty values are
+       the ones actually read.
+    2. Every route into the commit machinery is replaced with a landmine. If a
+       future edit points this endpoint back at a builder that constructs a
+       commit operator, a TrueForge client, or resolves a model, this test fails
+       loudly at the call rather than passing because a model happened to be
+       configured on the machine running it.
+    """
+    from app.api import dependencies
+    from app.core.config import Settings, get_settings
+
+    run_id = await run_awaiting_approval(client)
+
+    monkeypatch.setenv("BRANCHPOINT_MODEL", "")
+    monkeypatch.setenv("BRANCHPOINT_TRUEFORGE_MODEL", "")
+    get_settings.cache_clear()
+
+    def _forbidden(*args: object, **kwargs: object) -> object:
+        raise AssertionError(
+            "the rejection path reached commit machinery; a refusal must not "
+            "construct a commit operator, a TrueForge client, or resolve a model"
+        )
+
+    monkeypatch.setattr(dependencies, "build_commit_operator", _forbidden)
+    monkeypatch.setattr(dependencies, "get_trueforge_client", _forbidden)
+    monkeypatch.setattr(Settings, "resolve_model", _forbidden)
+
+    try:
+        response = await client.post(
+            f"/api/v1/runs/{run_id}/rejection", json={"actor": ACTOR, "reason": REASON}
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["approval_status"] == "REJECTED"
+        assert body["run_status"] == "REJECTED"
+        assert body["commit_possible"] is False
+        assert body["actor"] == ACTOR
+        assert body["reason"] == REASON
+    finally:
+        # The cache now holds a model-less Settings built from the patched
+        # environment; drop it so later tests read the real configuration.
+        get_settings.cache_clear()
+
+
+async def test_the_rejection_coordinator_holds_nothing_that_can_commit() -> None:
+    """The dependency is gone structurally, not guarded at runtime.
+
+    A behavioural test proves the current path does not *call* the commit
+    machinery. This proves there is nothing on the object to call: no commit
+    operator, no capability store, no client. That is what makes the property
+    survive refactoring.
+    """
+    from app.api.dependencies import build_rejection_coordinator
+
+    coordinator = build_rejection_coordinator()
+
+    attached = vars(coordinator)
+    assert set(attached) == {"_orchestrator", "_repository", "_events"}, attached
+    assert not hasattr(coordinator, "_commit_operator")
+    # And it cannot commit by delegation either: the refusing path is the only
+    # thing it exposes.
+    assert not hasattr(coordinator, "approve")

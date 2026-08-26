@@ -26,6 +26,7 @@ from app.api.dependencies import (
     SessionBindingStoreDep,
     build_agent_orchestrator,
     build_approval_coordinator,
+    build_rejection_coordinator,
 )
 from app.application.errors import RunNotFoundError
 from app.application.orchestration.agent_run import AgentRunService
@@ -742,7 +743,10 @@ async def reject_run(run_id: str, body: RejectRunRequest) -> HumanDecisionRespon
     capability store, and the run it leaves behind is terminal ``REJECTED``,
     which every existing commit gate already refuses.
     """
-    coordinator = build_approval_coordinator()
+    # Not build_approval_coordinator(): that builder eagerly constructs the
+    # commit operator, which resolves a model. Declining an action must not
+    # require the provider configuration that carrying it out does.
+    coordinator = build_rejection_coordinator()
     try:
         run = await coordinator.reject(run_id, actor=body.actor, reason=body.reason)
     except RunNotFoundError as exc:
