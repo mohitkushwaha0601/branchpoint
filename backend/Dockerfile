@@ -20,6 +20,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 # Copy only application code required at runtime.
 COPY README.md ./
 COPY app ./app
+COPY setup_trueforge_railway.sh ./
+RUN chmod +x setup_trueforge_railway.sh
 
 # Install the project into the environment after source is present.
 RUN uv sync --frozen --no-dev
