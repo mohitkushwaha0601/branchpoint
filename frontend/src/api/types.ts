@@ -285,6 +285,31 @@ export interface ApprovalDecisionDto {
   detail: string;
 }
 
+/**
+ * A human's refusal of the recommended world.
+ *
+ * Governance, not safety: nothing about the world's verdict changes. Carries no
+ * action content for the same reason the approval body does not — a person
+ * declines what BRANCHPOINT recommended and cannot name something else.
+ */
+export interface RejectionRequest {
+  actor: string;
+  reason?: string;
+}
+
+export interface HumanDecisionDto {
+  run_id: string;
+  world_id: string;
+  approval_status: string;
+  run_status: RunStatusDto;
+  actor: string | null;
+  reason: string;
+  decided_at: string | null;
+  /** Stated by the backend, never inferred from a status enum. */
+  commit_possible: boolean;
+  detail: string;
+}
+
 export interface HealthDto {
   status: string;
   service: string;

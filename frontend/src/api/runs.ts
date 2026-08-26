@@ -7,7 +7,9 @@ import type {
   ApprovalRequest,
   ComparisonDetailDto,
   EventListDto,
+  HumanDecisionDto,
   HarnessTraceDto,
+  RejectionRequest,
   RunDto,
   RunListDto,
   StartRunRequest,
@@ -88,6 +90,24 @@ export function approveRun(
 ): Promise<ApprovalDecisionDto> {
   return request<ApprovalDecisionDto>(
     `/api/v1/runs/${encodeURIComponent(runId)}/approval`,
+    { method: "POST", body, signal },
+  );
+}
+
+/**
+ * Record a human's refusal of the recommended world.
+ *
+ * A separate route from {@link approveRun} on purpose: approval is the only
+ * path that reaches the destructive commit operator, and rejection has no
+ * reachable commit code at all. Nothing here can mutate reality.
+ */
+export function rejectRun(
+  runId: string,
+  body: RejectionRequest,
+  signal?: AbortSignal,
+): Promise<HumanDecisionDto> {
+  return request<HumanDecisionDto>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/rejection`,
     { method: "POST", body, signal },
   );
 }

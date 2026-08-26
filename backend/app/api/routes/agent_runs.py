@@ -85,6 +85,33 @@ class ApproveRunRequest(BaseModel):
     expected_action_fingerprint: str | None = None
 
 
+class RejectRunRequest(BaseModel):
+    """Body of ``POST /api/v1/runs/{run_id}/rejection``.
+
+    Carries no action content, exactly like the approval body: a human declines
+    what BRANCHPOINT recommended, and cannot name something else to decline.
+    """
+
+    actor: str = Field(min_length=1, max_length=200)
+    reason: str = Field(default="", max_length=500)
+
+
+class HumanDecisionResponse(BaseModel):
+    """What the frontend needs after a human refuses the recommendation."""
+
+    run_id: str
+    world_id: str
+    approval_status: str
+    run_status: RunStatus
+    actor: str | None
+    reason: str
+    decided_at: datetime | None
+    #: Always ``False`` here. Stated rather than implied so a client never has
+    #: to infer from a status enum whether a commit is still on the table.
+    commit_possible: bool
+    detail: str
+
+
 class AcceptedRunResponse(BaseModel):
     """What ``POST /api/v1/agent-runs`` returns, before any agent work happens.
 
@@ -590,6 +617,42 @@ async def get_run_worlds(run_id: str, repository: RunRepositoryDep) -> WorldsRes
     return WorldsResponse(
         run_id=run_id,
         worlds=tuple(WorldDetailResponse.from_domain(world) for world in run.worlds),
+    )
+
+
+@router.post("/runs/{run_id}/rejection", response_model=HumanDecisionResponse)
+async def reject_run(run_id: str, body: RejectRunRequest) -> HumanDecisionResponse:
+    """Record a human's refusal of the recommended world.
+
+    Governance, not safety: the world's verdict, its evidence, and every
+    counterexample are untouched. What changes is that a person declined to act,
+    which is a fact BRANCHPOINT stores and nothing else may assert on their
+    behalf.
+
+    This route cannot commit. It never reaches the commit operator or the
+    capability store, and the run it leaves behind is terminal ``REJECTED``,
+    which every existing commit gate already refuses.
+    """
+    coordinator = build_approval_coordinator()
+    try:
+        run = await coordinator.reject(run_id, actor=body.actor, reason=body.reason)
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ApprovalNotAvailableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    approval = run.approval
+    assert approval is not None  # a rejected run always carries its decision
+    return HumanDecisionResponse(
+        run_id=run.run_id,
+        world_id=approval.selected_world_id,
+        approval_status=str(approval.status),
+        run_status=run.status,
+        actor=approval.actor,
+        reason=approval.reason,
+        decided_at=approval.decided_at,
+        commit_possible=False,
+        detail="human rejection recorded; nothing was committed and reality is unchanged",
     )
 
 

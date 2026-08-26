@@ -410,6 +410,7 @@ export const heroRun: Run = {
   approval: {
     required: true,
     status: "PENDING",
+    actor: null,
     worldId: "world_beta",
     actionId: "action_b8e2",
     actionFingerprint: "3d7a1e05c94b2f6d",
@@ -421,6 +422,7 @@ export const heroRun: Run = {
       { label: "Action fingerprint bound", satisfied: true },
     ],
   },
+  rejectionReason: "",
   realityCommitted: false,
   commitStatus: null,
   verificationStatus: null,

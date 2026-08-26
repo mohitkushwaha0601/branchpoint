@@ -20,7 +20,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { approveRun } from "../api/runs";
+import { approveRun, rejectRun } from "../api/runs";
 import { ApiError, isAbortError } from "../api/errors";
 import type { Run, World } from "../types/run";
 
@@ -38,12 +38,14 @@ interface RunViewValue {
   selectStage: (worldId: string, stageId: string) => void;
   setHoveredWorldId: (worldId: string | null) => void;
 
-  /** True from the moment Approve is pressed until the request settles. */
+  /** True from the moment a decision is pressed until the request settles. */
   approving: boolean;
   approvalError: ApiError | null;
-  /** Whether this session has already submitted an approval for this run. */
+  /** Whether this session has already submitted a decision for this run. */
   approvalSubmitted: boolean;
   approve: () => void;
+  /** Record a human refusal. Cannot commit; the backend has no path from here. */
+  reject: (reason: string) => void;
   dismissApprovalError: () => void;
 }
 
@@ -116,6 +118,40 @@ export function RunViewProvider({
     })();
   }, [approving, approvalSubmitted, run, onChanged]);
 
+  const reject = useCallback(
+    (reason: string) => {
+      // Guarded here as well as in the button, so a second press cannot slip
+      // through between a click and the re-render that disables it.
+      if (approving || approvalSubmitted) return;
+      setApproving(true);
+      setApprovalError(null);
+
+      void (async () => {
+        try {
+          await rejectRun(run.runId, { actor: APPROVAL_ACTOR, reason });
+          setApprovalSubmitted(true);
+        } catch (caught) {
+          if (isAbortError(caught)) return;
+          setApprovalError(
+            caught instanceof ApiError
+              ? caught
+              : new ApiError({
+                  status: 0,
+                  detail: "BRANCHPOINT backend unreachable",
+                  method: "POST",
+                  path: `/api/v1/runs/${run.runId}/rejection`,
+                }),
+          );
+        } finally {
+          setApproving(false);
+          // Re-read either way: the decision is whatever the run now says.
+          onChanged?.();
+        }
+      })();
+    },
+    [approving, approvalSubmitted, run.runId, onChanged],
+  );
+
   const value = useMemo<RunViewValue>(() => {
     // Default to the comparator's pick: the thing a human is being asked about
     // should be what they are already looking at. Falls back to the first world
@@ -137,6 +173,7 @@ export function RunViewProvider({
       approvalError,
       approvalSubmitted,
       approve,
+      reject,
       dismissApprovalError,
     };
   }, [
@@ -150,6 +187,7 @@ export function RunViewProvider({
     approvalError,
     approvalSubmitted,
     approve,
+    reject,
     dismissApprovalError,
   ]);
 

@@ -218,7 +218,16 @@ export interface ApprovalCheck {
 
 export interface Approval {
   required: boolean;
+  /** The human decision as the backend recorded it. */
   status: "PENDING" | "APPROVED" | "REJECTED";
+  /**
+   * Who the backend recorded as having decided. `null` while pending.
+   *
+   * Not the same thing as `APPROVAL_ACTOR`: that is who *this browser* claims
+   * to be when it submits a decision. A run decided elsewhere, or by someone
+   * else, must display the name on the record rather than this session's.
+   */
+  actor: string | null;
   worldId: string;
   actionId: string;
   actionFingerprint: string;
@@ -262,6 +271,8 @@ export interface Run {
   comparison: Comparison;
   approval: Approval;
   events: RunEvent[];
+  /** The operator's own words when they declined. Empty unless rejected. */
+  rejectionReason: string;
   /** Present once reality has been re-read after a commit. */
   realityCommitted: boolean;
   commitStatus: string | null;

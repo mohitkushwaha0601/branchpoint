@@ -47,13 +47,14 @@ describe("approval gate", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not offer a reject the backend cannot honour", () => {
+  it("offers both human decisions while the run awaits one", () => {
     renderFixture();
 
-    expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
+    expect(screen.getByText("AWAITING HUMAN DECISION")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
     expect(
-      screen.getByText(/Rejection is not exposed by the current API/),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: "Approve & Commit" }),
+    ).toBeEnabled();
   });
 });
 

@@ -300,9 +300,12 @@ describe("approval", () => {
 
     await user.click(screen.getByRole("button", { name: "Approve & Commit" }));
 
+    // The backend's own detail is shown, not a canned line — a 409 means
+    // different things for approval and rejection, and only it knows which.
     expect(
-      await screen.findByText(/no longer matches the run/),
+      await screen.findByText("approval does not match the bound action"),
     ).toBeInTheDocument();
+    expect(screen.getByText("Re-read the run before deciding again.")).toBeInTheDocument();
     expect(screen.queryByText(/committed and independently verified/i)).not.toBeInTheDocument();
   });
 

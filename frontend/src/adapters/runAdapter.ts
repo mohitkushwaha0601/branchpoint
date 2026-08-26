@@ -207,6 +207,7 @@ function approvalFor(run: RunDto, worlds: World[]): Approval {
     return {
       required: false,
       status: "PENDING",
+      actor: null,
       worldId: "",
       actionId: "",
       actionFingerprint: "",
@@ -220,6 +221,7 @@ function approvalFor(run: RunDto, worlds: World[]): Approval {
   return {
     required: run.status === "AWAITING_APPROVAL",
     status,
+    actor: dto.actor,
     worldId: dto.selected_world_id,
     actionId: dto.action_id,
     actionFingerprint: dto.action_fingerprint,
@@ -303,6 +305,7 @@ export function adaptRun({
     comparison: comparisonFor(run, comparison),
     approval: approvalFor(run, adaptedWorlds),
     events: events === null ? [] : adaptEvents(events),
+    rejectionReason: run.approval?.status === "REJECTED" ? run.approval.reason : "",
     realityCommitted: run.commit_status === "SUCCEEDED",
     commitStatus: run.commit_status,
     verificationStatus: run.verification_status,

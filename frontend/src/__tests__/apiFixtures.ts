@@ -387,6 +387,20 @@ export function mockServer(initial: RouteTable = {}): MockServer {
         if (path.endsWith("/agent-runs")) {
           return json({ run_id: RUN_ID, status: "CREATED", detail: "run accepted" }, 202);
         }
+        if (path.endsWith("/rejection")) {
+          const body = init?.body === undefined ? {} : JSON.parse(String(init.body));
+          return json({
+            run_id: RUN_ID,
+            world_id: "world_beta",
+            approval_status: "REJECTED",
+            run_status: "REJECTED",
+            actor: body.actor ?? null,
+            reason: body.reason ?? "",
+            decided_at: "2026-08-26T18:45:00Z",
+            commit_possible: false,
+            detail: "human rejection recorded; nothing was committed",
+          });
+        }
         if (path.endsWith("/approval")) {
           return json({
             run_id: RUN_ID,
@@ -839,6 +853,29 @@ export function partiallyLinkedInspection(): WorldInspectionDto {
         authoritative: true,
         summary: "Payment retry idempotency regression",
       },
+    },
+  };
+}
+
+/**
+ * A run a human declined: terminal REJECTED, approval REJECTED, no commit.
+ *
+ * `actor` is a parameter so a test can name someone other than this browser's
+ * `APPROVAL_ACTOR` — a run decided in another session, or by another operator.
+ */
+export function rejectedRunDto(
+  reason = "Rollback risk is unacceptable.",
+  actor = "release-engineer",
+): RunDto {
+  const run = runDto({ status: "REJECTED" });
+  return {
+    ...run,
+    approval: {
+      ...run.approval!,
+      status: "REJECTED",
+      actor,
+      reason,
+      decided_at: "2026-08-26T18:45:00Z",
     },
   };
 }

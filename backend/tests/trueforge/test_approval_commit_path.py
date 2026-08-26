@@ -551,9 +551,13 @@ def test_no_rest_route_bypasses_capability_enforcement() -> None:
         # Issues a one-time capability, and only for an APPROVED run whose
         # binding still validates. Issuing is not spending.
         "POST /api/v1/runs/{run_id}/commit-capability",
-        # The one human decision. Commits only what is already bound, through
-        # the destructive MCP tool and its capability gate.
+        # The one human decision that commits. Commits only what is already
+        # bound, through the destructive MCP tool and its capability gate.
         "POST /api/v1/runs/{run_id}/approval",
+        # The other human decision. Records a refusal and nothing else: it has
+        # no path to the commit operator or the capability store, and the run it
+        # leaves behind is terminal REJECTED, which every commit gate refuses.
+        "POST /api/v1/runs/{run_id}/rejection",
         # Starts an agent run. Stops at the gate.
         "POST /api/v1/agent-runs",
         # Demo-only scenario reset, refused when BRANCHPOINT_ENV=production.
