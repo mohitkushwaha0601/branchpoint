@@ -67,6 +67,17 @@ class BranchpointOrchestrator:
         self._clock = clock
         self._id = id_factory
 
+    @property
+    def repository(self) -> RunRepository:
+        """Read access to the run store this orchestrator writes through.
+
+        Exposed so a caller that must record an outcome *about* a run it was
+        driving — the background runner failing a run whose pipeline raised —
+        can do so through the same store, rather than keeping a second handle
+        that could drift from this one.
+        """
+        return self._repository
+
     # ----- run steps ---------------------------------------------------------
 
     async def create_run(self, incident: Incident) -> BranchpointRun:

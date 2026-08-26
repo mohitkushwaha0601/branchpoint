@@ -88,6 +88,34 @@ SANDBOX_UNAVAILABLE_STEP = """\
 3. You have no sandbox in this run. There is nothing to execute and no script
    to write: reason directly from what the read-only tools return."""
 
+#: The one bounded delegation the rollback world must make.
+#:
+#: TrueForge's dynamic-subagent mechanism is model-directed: the harness exposes
+#: a local ``create_sub_agent`` tool (verified in the 0.1.4 client bundle) and
+#: the model decides whether to call it. So the only way to *guarantee* a real
+#: nested thread on the hero path is to instruct it — which is what this does,
+#: with a hard cap so a delegation cannot become a recursion.
+#:
+#: The subagent inherits the parent's read-only world tools and nothing else,
+#: and its output is a hypothesis. The parent still owns the single
+#: CounterexampleSpec, and BRANCHPOINT still owns reproduction.
+SUBAGENT_DELEGATION_STEP = """\
+2b. Before you answer, delegate EXACTLY ONE narrow investigation using your
+   `create_sub_agent` tool. Name it "Compatibility Skeptic" and give it this
+   task:
+
+     "Inspect this counterfactual rollback for schema and payment-retry
+      compatibility risks. Use only the read-only world context available to
+      you. Return hypotheses, not authoritative conclusions."
+
+   Delegate once and only once. Do not let the subagent delegate further, and
+   do not spawn a second one — a rollback needs one skeptical read, not a tree
+   of them. Wait for it, then continue your own investigation.
+
+   What it returns is a hypothesis, exactly like your own sandbox output: it is
+   EXPLORATORY, it is not evidence, and it cannot veto anything. You remain the
+   only author of the counterexample you submit."""
+
 SANDBOX_AVAILABLE_NOTE = """\
 Note that the sandbox is a convenience, not a precondition. If it is
 unavailable, keep investigating with the read-only tools and still submit any
@@ -102,7 +130,13 @@ an unverified-but-grounded submission costs nothing and withholding one loses a
 real finding."""
 
 
-def doppelganger_instructions(run_id: str, world_id: str, *, sandbox_enabled: bool = True) -> str:
+def doppelganger_instructions(
+    run_id: str,
+    world_id: str,
+    *,
+    sandbox_enabled: bool = True,
+    delegate_subagent: bool = False,
+) -> str:
     """Build the DOPPELGÄNGER brief for one world.
 
     Deliberately omits any hint about which action is dangerous or why. The
@@ -117,10 +151,16 @@ def doppelganger_instructions(run_id: str, world_id: str, *, sandbox_enabled: bo
     brief never promises an execution capability the session does not have.
     Either way the authority boundary is identical: nothing the adversary runs,
     writes, or says is evidence — only a spec BRANCHPOINT replays itself.
+
+    ``delegate_subagent`` asks for exactly one bounded ``create_sub_agent``
+    delegation. It is set for the rollback world only: that is the case where a
+    second skeptical read is genuinely useful, and requiring it everywhere would
+    multiply latency and cost for no extra signal.
     """
     checks = ", ".join(sorted(REPLAYABLE_CHECKS))
     sandbox_step = SANDBOX_AVAILABLE_STEP if sandbox_enabled else SANDBOX_UNAVAILABLE_STEP
     sandbox_note = SANDBOX_AVAILABLE_NOTE if sandbox_enabled else SANDBOX_UNAVAILABLE_NOTE
+    delegation_step = f"\n{SUBAGENT_DELEGATION_STEP}" if delegate_subagent else ""
     metric_invariants = ", ".join(sorted(str(name) for name in METRIC_INVARIANTS))
     check_invariants = ", ".join(sorted(str(name) for name in CHECK_INVARIANTS))
     return f"""\
@@ -160,7 +200,7 @@ one. Only an actual breach of a declared invariant counts.
 1. Investigate the world with the read-only BRANCHPOINT world tools: the action
    it applied, its resulting metrics, its orders summary, and its compatibility
    context. Compare against reality where useful.
-2. Form a specific, falsifiable hypothesis about how this world breaks.
+2. Form a specific, falsifiable hypothesis about how this world breaks.{delegation_step}
 {sandbox_step}
 4. Submit your best finding as a structured counterexample (below).
    BRANCHPOINT will replay it deterministically. If BRANCHPOINT reproduces the

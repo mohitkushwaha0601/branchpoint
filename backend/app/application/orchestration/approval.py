@@ -17,6 +17,12 @@ already recommended, and may optionally restate the world/action/fingerprint it
 believes it is approving — restating something different is a conflict, never an
 override. That is the whole point: after approval, no model and no browser can
 choose, modify, or substitute the action.
+
+Refusal is **not** here. It lives in
+:mod:`app.application.orchestration.rejection`, which depends on nothing that
+can commit and therefore needs no model. Keeping the two apart is what stops a
+builder for the safe half of the gate from eagerly constructing the machinery
+the dangerous half needs.
 """
 
 from app.application.errors import ApplicationError, RunNotFoundError

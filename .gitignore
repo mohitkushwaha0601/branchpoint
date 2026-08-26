@@ -1,9 +1,43 @@
+# One ignore file for the whole repo. Patterns are unanchored unless a path is
+# genuinely specific to one workspace, so a second Python or Node package added
+# later is covered without editing this file again.
+
+# --- secrets -----------------------------------------------------------------
+.env
+.env.local
+*.local
+
+# --- python (backend/) -------------------------------------------------------
 .venv/
 __pycache__/
+*.pyc
 .pytest_cache/
 .ruff_cache/
-*.pyc
-.env
+
+# --- node (frontend/) --------------------------------------------------------
+# Lockfiles are deliberately NOT ignored: package-lock.json is committed.
+node_modules/
+dist/
+dist-ssr/
+.vite/
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- editors and os ----------------------------------------------------------
 .DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.claude/
 venv/.env
 venv/

@@ -16,6 +16,7 @@ turns that into an ``INCONCLUSIVE`` world. None of them can produce
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.domain.actions.models import ActionType
 from app.domain.evidence.models import Evidence, EvidenceKind, EvidenceSeverity
 from app.domain.primitives import new_id, utc_now
 from app.domain.worlds.models import (
@@ -48,6 +49,15 @@ from app.infrastructure.trueforge.sessions import (
     SessionPurpose,
     SessionStatus,
 )
+
+#: Action families that get one bounded ``create_sub_agent`` delegation.
+#:
+#: Rollback is the case where a second, narrower read genuinely pays: it is the
+#: only family whose risk is a *compatibility* boundary rather than a metric,
+#: and that is exactly what a skeptic can be pointed at. Requiring a delegation
+#: on every world would multiply latency and model cost without adding signal,
+#: so it is scoped rather than global.
+DELEGATING_ACTION_TYPES: frozenset[ActionType] = frozenset({ActionType.ROLLBACK})
 
 #: Provenance stamped on everything that originates inside the adversary's own
 #: TrueForge session — sandbox ``exec``, sandbox files, sandbox scripts,
@@ -133,6 +143,7 @@ class TrueForgeAdversarialTester:
         bindings: InMemorySessionBindingStore,
         mcp_server_name: str = "branchpoint",
         sandbox_enabled: bool = False,
+        skill_name: str = "",
     ) -> None:
         self._client = client
         self._engine = engine
@@ -140,8 +151,9 @@ class TrueForgeAdversarialTester:
         self._bindings = bindings
         self._mcp_server_name = mcp_server_name
         self._sandbox_enabled = sandbox_enabled
+        self._skill_name = skill_name
 
-    def agent_spec(self, run_id: str, world_id: str) -> dict:
+    def agent_spec(self, run_id: str, world_id: str, *, delegate_subagent: bool = False) -> dict:
         """Build the inline TrueForge agent spec for one world's adversary.
 
         Subagents are enabled (the DOPPELGÄNGER is delegated to one). A sandbox
@@ -156,11 +168,19 @@ class TrueForgeAdversarialTester:
         Nothing that runs in the sandbox is authoritative. It cannot reach
         reality, cannot reach the replay engine, and its output is recorded
         under :data:`SANDBOX_EVIDENCE_SOURCE` with ``machine_verifiable=False``.
+
+        ``delegate_subagent`` asks the brief for one bounded delegation. It
+        changes no capability: a subagent TrueForge spawns from this session
+        inherits this session's tools, which are the same eight read-only world
+        tools, and its findings land in the same non-authoritative bucket.
         """
-        return {
+        spec: dict = {
             "model": {"name": self._model},
             "instructions": doppelganger_instructions(
-                run_id, world_id, sandbox_enabled=self._sandbox_enabled
+                run_id,
+                world_id,
+                sandbox_enabled=self._sandbox_enabled,
+                delegate_subagent=delegate_subagent,
             ),
             "mcp_servers": [
                 {
@@ -176,6 +196,17 @@ class TrueForgeAdversarialTester:
                 "iteration_limit": 60,
             },
         }
+        # Omitted entirely when unset: naming a skill TrueForge does not have
+        # would fail session creation, so this key appears only once an operator
+        # has registered one and said so.
+        if self._skill_name:
+            spec["skills"] = [{"name": self._skill_name}]
+        return spec
+
+    @staticmethod
+    def _should_delegate(world: World) -> bool:
+        """Whether this world's brief asks for one bounded subagent delegation."""
+        return world.candidate_action.action_type in DELEGATING_ACTION_TYPES
 
     @property
     def sandbox_enabled(self) -> bool:
@@ -189,7 +220,11 @@ class TrueForgeAdversarialTester:
         ``INCONCLUSIVE`` verdict, never ``SURVIVED``.
         """
         session_id = await self._client.create_session(
-            self.agent_spec(world.run_id, world.world_id)
+            self.agent_spec(
+                world.run_id,
+                world.world_id,
+                delegate_subagent=self._should_delegate(world),
+            )
         )
         await self._bindings.upsert(
             run_id=world.run_id,

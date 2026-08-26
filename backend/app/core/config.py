@@ -92,6 +92,39 @@ class Settings(BaseSettings):
     the machine-verifiable failing evidence a veto requires.
     """
 
+    trueforge_skill_name: str = ""
+    """Name of a TrueForge Skill to mount on DOPPELGÄNGER sessions.
+
+    Empty by default, and empty means the agent spec carries no ``skills`` key
+    at all — the hero path is exactly what it was.
+
+    It is opt-in because a skill is registered with TrueForge *out of band*
+    (``PUT /api/v1/settings/skills`` with a git manifest) and referenced here by
+    name. Naming a skill TrueForge has not been given makes the turn
+    unprocessable, which is the one place a failure is least affordable.
+    Register the skill first, confirm it, then set this.
+
+    A mounted skill also needs a sandbox: TrueForge materialises skills in the
+    sandbox working directory, so set this only alongside
+    ``BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED``. Nothing enforces the pairing here
+    — a guard would be this codebase asserting third-party behaviour it cannot
+    verify offline — so it is documented rather than checked.
+
+    See ``trueforge/skills/incident-counterfactual-review/SKILL.md``.
+    """
+
+    cors_allow_origins: str = ""
+    """Comma-separated browser origins allowed to call this API.
+
+    Empty by default, which installs no CORS middleware at all: local
+    development goes through the Vite dev-server proxy, so the browser only ever
+    talks to its own origin and CORS never enters the picture.
+
+    Set this only for a deployed frontend on a different origin, and set it to
+    exact origins — ``https://branchpoint.vercel.app``, never ``*``. Credentials
+    are never enabled, so a wildcard could not be combined with them anyway.
+    """
+
     demo_scenario_path: str | None = None
     """Override path to the hero scenario fixture (``BRANCHPOINT_DEMO_SCENARIO_PATH``).
 
@@ -99,6 +132,15 @@ class Settings(BaseSettings):
     ``app.infrastructure.demo``, which works regardless of how the package was
     installed. Set this only to point at a different scenario file.
     """
+
+    def resolve_cors_origins(self) -> tuple[str, ...]:
+        """Return the configured browser origins, trimmed and de-duplicated."""
+        seen: dict[str, None] = {}
+        for origin in self.cors_allow_origins.split(","):
+            trimmed = origin.strip()
+            if trimmed:
+                seen.setdefault(trimmed, None)
+        return tuple(seen)
 
     def resolve_model(self) -> str:
         """Return the single model FQN every TrueForge-backed agent must use.

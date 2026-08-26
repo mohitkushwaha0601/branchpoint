@@ -108,6 +108,60 @@ If the sandbox is unavailable, the adversary fails closed like any other TrueFor
 
 The only authoritative path is a typed `CounterexampleSpec` replayed by BRANCHPOINT against the world's own isolated snapshot. Every operation in that spec maps to a named, allowlisted demo primitive; there is no way to submit code. Sandbox-generated code never runs in the FastAPI process, and the sandbox cannot reach reality.
 
+## Skills (optional, opt-in)
+
+`skills/incident-counterfactual-review/SKILL.md` is a reusable adversarial
+incident-review playbook. TrueForge 0.1.4 mounts skills by name in the agent
+spec (`skills: [{name}]`) after they are registered out of band with a git
+manifest — verified in its client bundle as `{type, url, name, ref, path?}`:
+
+```bash
+curl -X PUT http://localhost:8790/api/v1/settings/skills \
+  -H 'content-type: application/json' \
+  -d '{"manifest":{"type":"git",
+       "name":"incident-counterfactual-review",
+       "url":"https://github.com/<owner>/branchpoint",
+       "ref":"main",
+       "path":"trueforge/skills/incident-counterfactual-review"}}'
+
+# only once TrueForge confirms the skill:
+export BRANCHPOINT_TRUEFORGE_SKILL_NAME=incident-counterfactual-review
+```
+
+A `description` may be included in the manifest; the server stores
+`{type, name, url, path, ref, description}` and nothing is read from the file
+itself at registration time.
+
+It is **off by default and deliberately so**, for four reasons found by reading
+the 0.1.4 server bundle rather than assumed:
+
+1. **Registration is a network operation.** TrueForge clones the named repo with
+   its own `git_downloader.py`, so the repo must be public and reachable at
+   registration time. It cannot be performed or verified offline.
+2. **A skill needs a sandbox.** `getSkillsDir()` is called from `createSandbox`
+   and the skill is materialised in the sandbox working directory. So a mounted
+   skill is only usable when `BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED=true` —
+   enabling the skill with the sandbox off mounts something TrueForge cannot
+   place.
+3. **A missing skill stops the turn.** The server's own error text is explicit:
+   a turn "cannot be processed" when "a referenced resource is missing (named
+   agent, model, MCP server, skill, or sandbox provider)". Naming an
+   unregistered skill breaks the run at the least affordable moment.
+4. **Subagent inheritance is unverifiable here.** Whether a model-created
+   subagent inherits its parent's skills is not answerable from this package:
+   `create_sub_agent` appears in the client bundle but the server bundle
+   contains no subagent implementation at all. Attaching the skill to the
+   Compatibility Skeptic specifically would be guesswork.
+
+With `BRANCHPOINT_TRUEFORGE_SKILL_NAME` unset the DOPPELGÄNGER spec carries no
+`skills` key at all — exactly the hero path as shipped. The planner and the
+commit operator never carry one under any setting: they run with the sandbox
+off, and only the adversary's spec builder accepts a skill name.
+
+Whether or not it is mounted, the skill is **exploratory**. It instructs an
+agent on how to look for a counterexample; it cannot make one authoritative,
+and only BRANCHPOINT's deterministic replay produces evidence that can veto.
+
 ## Sessions and resume
 
 TrueForge persists sessions, turns, and events in SQLite. BRANCHPOINT stores only a `TrueForgeSessionBinding` (`run_id`, optional `world_id`, purpose, `trueforge_session_id`, status, `last_turn_id`, pending tool-call id) so a domain run can be reconnected to its sessions after a restart. Re-binding the same run/world/purpose updates in place, so an interrupted run cannot duplicate a world or a commit.

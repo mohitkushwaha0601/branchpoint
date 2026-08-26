@@ -14,16 +14,19 @@ it already holds — and then through independent verification.
 """
 
 from datetime import datetime
+from enum import StrEnum
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import (
+    BackgroundRunnerDep,
     EventSinkDep,
     RunRepositoryDep,
     SessionBindingStoreDep,
     build_agent_orchestrator,
     build_approval_coordinator,
+    build_rejection_coordinator,
 )
 from app.application.errors import RunNotFoundError
 from app.application.orchestration.agent_run import AgentRunService
@@ -33,11 +36,23 @@ from app.application.orchestration.approval import (
     CommitFailedError,
 )
 from app.core.config import ModelNotConfiguredError, Settings, get_settings
+from app.domain.actions.models import ActionType, CandidateAction, RiskClass
 from app.domain.comparison.models import ComparisonResult
+from app.domain.evidence.models import Evidence, EvidenceKind, EvidenceSeverity
 from app.domain.incidents.models import Incident, IncidentSeverity
-from app.domain.primitives import new_id, utc_now
+from app.domain.primitives import ScalarValue, new_id, utc_now
 from app.domain.runs.lifecycle import RunStatus
-from app.domain.worlds.models import World
+from app.domain.worlds.models import (
+    Counterexample,
+    CounterexampleStatus,
+    ExecutionOutcome,
+    World,
+)
+from app.domain.worlds.verdicts import (
+    counterexample_vetoes,
+    disqualifying_evidence,
+    vetoing_counterexamples,
+)
 from app.infrastructure.trueforge.errors import TrueForgeError
 
 router = APIRouter(prefix="/api/v1", tags=["agent-runs"])
@@ -77,6 +92,46 @@ class ApproveRunRequest(BaseModel):
     expected_action_fingerprint: str | None = None
 
 
+class RejectRunRequest(BaseModel):
+    """Body of ``POST /api/v1/runs/{run_id}/rejection``.
+
+    Carries no action content, exactly like the approval body: a human declines
+    what BRANCHPOINT recommended, and cannot name something else to decline.
+    """
+
+    actor: str = Field(min_length=1, max_length=200)
+    reason: str = Field(default="", max_length=500)
+
+
+class HumanDecisionResponse(BaseModel):
+    """What the frontend needs after a human refuses the recommendation."""
+
+    run_id: str
+    world_id: str
+    approval_status: str
+    run_status: RunStatus
+    actor: str | None
+    reason: str
+    decided_at: datetime | None
+    #: Always ``False`` here. Stated rather than implied so a client never has
+    #: to infer from a status enum whether a commit is still on the table.
+    commit_possible: bool
+    detail: str
+
+
+class AcceptedRunResponse(BaseModel):
+    """What ``POST /api/v1/agent-runs`` returns, before any agent work happens.
+
+    Carries the id of the run the background drive will operate on — the same
+    run, never a copy — so a client can navigate to it and start watching the
+    timeline immediately.
+    """
+
+    run_id: str
+    status: RunStatus
+    detail: str
+
+
 class ApprovalDecisionResponse(BaseModel):
     """What the frontend needs after submitting a human approval."""
 
@@ -114,6 +169,169 @@ class AgentRunResponse(BaseModel):
     detail: str
 
 
+class EvidenceResponse(BaseModel):
+    """One observation about a world, with its authority stated rather than implied.
+
+    ``machine_verifiable`` is the authority bit and it comes straight off the
+    domain model: only evidence carrying it may disqualify a world. A client
+    must never infer authority from ``source`` — a TrueForge sandbox probe and a
+    BRANCHPOINT replay both have a source string, and only one of them counts.
+
+    ``disqualifying`` is the domain's own :attr:`Evidence.disqualifies`
+    (machine-verifiable *and* failing), exposed so the client does not have to
+    recombine the two and risk recombining them differently.
+    """
+
+    evidence_id: str
+    kind: EvidenceKind
+    source: str
+    claim: str
+    world_id: str | None
+    observed: ScalarValue
+    expected: ScalarValue
+    passed: bool | None
+    severity: EvidenceSeverity
+    machine_verifiable: bool
+    disqualifying: bool
+    artifact: str | None
+    recorded_at: datetime
+
+    @classmethod
+    def from_domain(cls, evidence: Evidence) -> "EvidenceResponse":
+        """Build the response from a domain evidence record."""
+        return cls(
+            evidence_id=evidence.evidence_id,
+            kind=evidence.kind,
+            source=evidence.source,
+            claim=evidence.claim,
+            world_id=evidence.world_id,
+            observed=evidence.observed,
+            expected=evidence.expected,
+            passed=evidence.passed,
+            severity=evidence.severity,
+            machine_verifiable=evidence.machine_verifiable,
+            disqualifying=evidence.disqualifies,
+            artifact=evidence.artifact,
+            recorded_at=evidence.recorded_at,
+        )
+
+
+class CounterexampleResponse(BaseModel):
+    """One adversarial attack against a world, and what it is allowed to prove.
+
+    ``status`` is what the attack claimed. ``authoritative`` is whether
+    BRANCHPOINT agrees — computed by the domain's own
+    :func:`counterexample_vetoes`, which requires both a reproduction *and*
+    machine-verifiable failing evidence behind it.
+
+    Those two can disagree, and that disagreement is the point: an adversary
+    that asserts ``REPRODUCED`` without disqualifying evidence serializes as
+    ``reproduced=true, authoritative=false`` and vetoes nothing.
+    """
+
+    counterexample_id: str
+    world_id: str
+    title: str
+    hypothesis: str
+    status: CounterexampleStatus
+    reproduced: bool
+    authoritative: bool
+    created_at: datetime
+    reproduction_steps: tuple[str, ...]
+    evidence_ids: tuple[str, ...]
+    #: The subset of ``evidence_ids`` that is machine-verifiable and failing —
+    #: i.e. the replay results that actually justify this attack.
+    supporting_evidence_ids: tuple[str, ...]
+
+    @classmethod
+    def from_domain(
+        cls, counterexample: Counterexample, evidence_by_id: dict[str, Evidence]
+    ) -> "CounterexampleResponse":
+        """Build the response, deciding authority through the domain rule."""
+        return cls(
+            counterexample_id=counterexample.attack_id,
+            world_id=counterexample.world_id,
+            title=counterexample.title,
+            hypothesis=counterexample.hypothesis,
+            status=counterexample.status,
+            reproduced=counterexample.status is CounterexampleStatus.REPRODUCED,
+            authoritative=counterexample_vetoes(counterexample, evidence_by_id),
+            created_at=counterexample.created_at,
+            reproduction_steps=counterexample.reproduction_steps,
+            evidence_ids=counterexample.evidence_ids,
+            supporting_evidence_ids=tuple(
+                evidence_id
+                for evidence_id in counterexample.evidence_ids
+                if (item := evidence_by_id.get(evidence_id)) is not None and item.disqualifies
+            ),
+        )
+
+
+class VetoBasis(StrEnum):
+    """Which of the two authoritative paths produced a veto.
+
+    Mirrors :func:`app.domain.worlds.verdicts.derive_verdict`, which vetoes
+    either on a substantiated counterexample or on standalone machine-verifiable
+    failing evidence. Both are authoritative; neither can come from model prose.
+    """
+
+    REPRODUCED_COUNTEREXAMPLE = "REPRODUCED_COUNTEREXAMPLE"
+    MACHINE_VERIFIABLE_FAILURE = "MACHINE_VERIFIABLE_FAILURE"
+
+
+class WorldVetoResponse(BaseModel):
+    """Structured linkage from a veto to the evidence that justified it.
+
+    Exists so a client never has to parse ``verdict_reason`` to find out what
+    vetoed a world. ``authoritative`` is ``True`` by construction: a veto is only
+    ever produced by evidence that qualifies, so a non-authoritative veto is not
+    a thing this API can represent.
+    """
+
+    basis: VetoBasis
+    #: Absent when the veto came from standalone failing evidence.
+    counterexample_id: str | None
+    #: The machine-verifiable failing evidence behind the veto.
+    evidence_ids: tuple[str, ...]
+    authoritative: bool
+    summary: str
+
+    @classmethod
+    def from_domain(cls, world: World) -> "WorldVetoResponse | None":
+        """Return the veto linkage for ``world``, or ``None`` if it was not vetoed.
+
+        Both branches delegate to the domain's own rules rather than re-deriving
+        them here, so this can never disagree with the verdict it describes.
+        """
+        vetoing = vetoing_counterexamples(world)
+        if vetoing:
+            index = world.evidence_by_id
+            first = vetoing[0]
+            return cls(
+                basis=VetoBasis.REPRODUCED_COUNTEREXAMPLE,
+                counterexample_id=first.attack_id,
+                evidence_ids=tuple(
+                    evidence_id
+                    for counterexample in vetoing
+                    for evidence_id in counterexample.evidence_ids
+                    if (item := index.get(evidence_id)) is not None and item.disqualifies
+                ),
+                authoritative=True,
+                summary=first.title,
+            )
+
+        failing = disqualifying_evidence(world)
+        if failing:
+            return cls(
+                basis=VetoBasis.MACHINE_VERIFIABLE_FAILURE,
+                counterexample_id=None,
+                evidence_ids=tuple(item.evidence_id for item in failing),
+                authoritative=True,
+                summary=", ".join(item.claim for item in failing),
+            )
+        return None
+
+
 class WorldDetailResponse(BaseModel):
     """One world with its measured outcome and evidence counts."""
 
@@ -132,12 +350,23 @@ class WorldDetailResponse(BaseModel):
     evidence_count: int
     counterexample_count: int
     reproduced_counterexamples: int
+    #: How many counterexamples BRANCHPOINT actually accepts as substantiated.
+    #: Can be lower than ``reproduced_counterexamples``: claiming a reproduction
+    #: is not the same as having evidence for one.
+    authoritative_counterexamples: int
+    #: Structured linkage to what vetoed this world, or ``null``.
+    veto: WorldVetoResponse | None
 
     @classmethod
     def from_domain(cls, world: World) -> "WorldDetailResponse":
         """Build the response from a domain world."""
         outcome = world.outcome
+        index = world.evidence_by_id
         return cls(
+            authoritative_counterexamples=sum(
+                1 for cx in world.counterexamples if counterexample_vetoes(cx, index)
+            ),
+            veto=WorldVetoResponse.from_domain(world),
             world_id=world.world_id,
             status=str(world.status),
             verdict=str(world.verdict) if world.verdict else None,
@@ -153,7 +382,142 @@ class WorldDetailResponse(BaseModel):
             evidence_count=len(world.evidence),
             counterexample_count=len(world.counterexamples),
             reproduced_counterexamples=sum(
-                1 for cx in world.counterexamples if str(cx.status) == "REPRODUCED"
+                1 for cx in world.counterexamples if cx.status is CounterexampleStatus.REPRODUCED
+            ),
+        )
+
+
+class ActionDetailResponse(BaseModel):
+    """The exact action a world rehearsed, as the domain stores it.
+
+    Everything here is already on ``CandidateAction``; the world list only ever
+    carried its id, name, and type, which is why a client could not say *what*
+    an action would change. The fingerprint is the same content hash an approval
+    binds to — safe to show, and not a capability.
+    """
+
+    action_id: str
+    name: str
+    description: str
+    action_type: ActionType
+    target_service: str
+    target_component: str | None
+    target_environment: str
+    #: The one parameter this action family changes, e.g. ``{"version": "v2.40"}``.
+    parameters: dict[str, ScalarValue]
+    expected_outcome: str
+    risk_class: RiskClass
+    reversible: bool
+    action_fingerprint: str
+    source_kind: str
+    source_name: str
+
+    @classmethod
+    def from_domain(cls, action: CandidateAction) -> "ActionDetailResponse":
+        """Build the response from a domain candidate action."""
+        return cls(
+            action_id=action.action_id,
+            name=action.name,
+            description=action.description,
+            action_type=action.action_type,
+            target_service=action.target.service,
+            target_component=action.target.component,
+            target_environment=action.target.environment,
+            parameters=dict(action.parameters),
+            expected_outcome=action.expected_outcome,
+            risk_class=action.risk_class,
+            reversible=action.reversible,
+            action_fingerprint=action.fingerprint(),
+            source_kind=str(action.source.kind),
+            source_name=action.source.name,
+        )
+
+
+class OutcomeDetailResponse(BaseModel):
+    """What executing the action in this world actually measured.
+
+    Every field is a stored value from ``ExecutionOutcome``. Nothing is derived,
+    and a world that has not executed yet has no outcome at all rather than a
+    zeroed one.
+    """
+
+    succeeded: bool
+    goal_achieved: bool
+    goal_attainment: float
+    invariants_preserved: bool
+    reversible: bool
+    regressions_detected: int
+    blast_radius: int
+    cost_delta: float
+    summary: str
+
+    @classmethod
+    def from_domain(cls, outcome: ExecutionOutcome) -> "OutcomeDetailResponse":
+        """Build the response from a domain execution outcome."""
+        return cls(
+            succeeded=outcome.succeeded,
+            goal_achieved=outcome.goal_achieved,
+            goal_attainment=outcome.goal_attainment,
+            invariants_preserved=outcome.invariants_preserved,
+            reversible=outcome.reversible,
+            regressions_detected=outcome.regressions_detected,
+            blast_radius=outcome.blast_radius,
+            cost_delta=outcome.cost_delta,
+            summary=outcome.summary,
+        )
+
+
+class WorldEvidenceResponse(BaseModel):
+    """A world's evidence on its own, for a client that wants only that."""
+
+    run_id: str
+    world_id: str
+    evidence: tuple[EvidenceResponse, ...]
+
+
+class WorldCounterexamplesResponse(BaseModel):
+    """A world's counterexamples on their own."""
+
+    run_id: str
+    world_id: str
+    counterexamples: tuple[CounterexampleResponse, ...]
+
+
+class WorldInspectionResponse(BaseModel):
+    """Everything BRANCHPOINT recorded about one world.
+
+    The Inspector's whole chain is readable from this without parsing prose:
+    the exploratory attack (``counterexamples``, and evidence whose
+    ``machine_verifiable`` is false), what BRANCHPOINT independently replayed
+    (evidence whose ``machine_verifiable`` is true), which of those failed
+    (``disqualifying``), and what that produced (``veto``).
+    """
+
+    run_id: str
+    world: WorldDetailResponse
+    action: ActionDetailResponse
+    #: ``None`` until the world has executed. Never a zeroed stand-in.
+    outcome: OutcomeDetailResponse | None
+    #: Domain order, which is arrival order: execution evidence, then attack
+    #: evidence, then replay evidence.
+    evidence: tuple[EvidenceResponse, ...]
+    counterexamples: tuple[CounterexampleResponse, ...]
+
+    @classmethod
+    def from_domain(cls, run_id: str, world: World) -> "WorldInspectionResponse":
+        """Build the response from a domain world."""
+        index = world.evidence_by_id
+        return cls(
+            run_id=run_id,
+            world=WorldDetailResponse.from_domain(world),
+            action=ActionDetailResponse.from_domain(world.candidate_action),
+            outcome=(
+                None if world.outcome is None else OutcomeDetailResponse.from_domain(world.outcome)
+            ),
+            evidence=tuple(EvidenceResponse.from_domain(item) for item in world.evidence),
+            counterexamples=tuple(
+                CounterexampleResponse.from_domain(counterexample, index)
+                for counterexample in world.counterexamples
             ),
         )
 
@@ -228,22 +592,33 @@ class ComparisonDetailResponse(BaseModel):
         )
 
 
-@router.post("/agent-runs", response_model=AgentRunResponse)
+@router.post(
+    "/agent-runs",
+    response_model=AcceptedRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def start_agent_run(
     body: StartAgentRunRequest,
-    repository: RunRepositoryDep,
     events: EventSinkDep,
     bindings: SessionBindingStoreDep,
-) -> AgentRunResponse:
-    """Start a TrueForge-backed run and drive it to the approval gate.
+    runner: BackgroundRunnerDep,
+) -> AcceptedRunResponse:
+    """Open a TrueForge-backed run and drive it to the approval gate in the background.
 
-    Returns once the run is awaiting human approval (or has been rejected).
-    Nothing in reality has changed.
+    Returns ``202`` as soon as the run exists, so Mission Control can navigate
+    to it and watch the real lifecycle rather than staring at a blocked POST for
+    the length of a planning pass.
+
+    The drive runs in this process against **this same run id**. It stops at
+    ``AWAITING_APPROVAL`` (or a terminal rejection): committing still requires
+    the separate, human-approved path, and nothing in reality has changed when
+    this returns.
     """
     settings: Settings = get_settings()
     try:
-        # Called for its check: a run must not start half-configured. The same
-        # resolution runs again inside ``build_agent_orchestrator``.
+        # Checked before the run exists: a half-configured run would be created
+        # only to fail on its first agent call. The same resolution runs again
+        # inside ``build_agent_orchestrator``.
         settings.resolve_model()
     except ModelNotConfiguredError as exc:
         raise HTTPException(
@@ -253,14 +628,18 @@ async def start_agent_run(
     service = AgentRunService(
         orchestrator=build_agent_orchestrator(), events=events, bindings=bindings
     )
-    try:
-        run = await service.drive_to_approval(body.to_incident())
-    except TrueForgeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"TrueForge failure: {exc}"
-        ) from exc
+    run = await service.create_run(body.to_incident())
 
-    return await _agent_run_response(run.run_id, repository, bindings)
+    # ``drive_safely`` turns any pipeline failure into this run's own FAILED
+    # state, so a client watching the run always learns what happened.
+    started = runner.start(run.run_id, lambda: service.drive_safely(run.run_id))
+    if not started:  # pragma: no cover - a fresh run id cannot already be running
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"run {run.run_id} is already being driven",
+        )
+
+    return AcceptedRunResponse(run_id=run.run_id, status=run.status, detail="run accepted")
 
 
 @router.get("/agent-runs/{run_id}", response_model=AgentRunResponse)
@@ -348,6 +727,117 @@ async def get_run_worlds(run_id: str, repository: RunRepositoryDep) -> WorldsRes
     return WorldsResponse(
         run_id=run_id,
         worlds=tuple(WorldDetailResponse.from_domain(world) for world in run.worlds),
+    )
+
+
+@router.post("/runs/{run_id}/rejection", response_model=HumanDecisionResponse)
+async def reject_run(run_id: str, body: RejectRunRequest) -> HumanDecisionResponse:
+    """Record a human's refusal of the recommended world.
+
+    Governance, not safety: the world's verdict, its evidence, and every
+    counterexample are untouched. What changes is that a person declined to act,
+    which is a fact BRANCHPOINT stores and nothing else may assert on their
+    behalf.
+
+    This route cannot commit. It never reaches the commit operator or the
+    capability store, and the run it leaves behind is terminal ``REJECTED``,
+    which every existing commit gate already refuses.
+    """
+    # Not build_approval_coordinator(): that builder eagerly constructs the
+    # commit operator, which resolves a model. Declining an action must not
+    # require the provider configuration that carrying it out does.
+    coordinator = build_rejection_coordinator()
+    try:
+        run = await coordinator.reject(run_id, actor=body.actor, reason=body.reason)
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ApprovalNotAvailableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    approval = run.approval
+    assert approval is not None  # a rejected run always carries its decision
+    return HumanDecisionResponse(
+        run_id=run.run_id,
+        world_id=approval.selected_world_id,
+        approval_status=str(approval.status),
+        run_status=run.status,
+        actor=approval.actor,
+        reason=approval.reason,
+        decided_at=approval.decided_at,
+        commit_possible=False,
+        detail="human rejection recorded; nothing was committed and reality is unchanged",
+    )
+
+
+async def _require_world(repository: RunRepositoryDep, run_id: str, world_id: str) -> World:
+    """Resolve one world, or answer 404 for whichever half is missing."""
+    run = await repository.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"run {run_id} not found")
+    world = run.world(world_id)
+    if world is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"world {world_id} not found in run {run_id}",
+        )
+    return world
+
+
+@router.get("/runs/{run_id}/worlds/{world_id}", response_model=WorldInspectionResponse)
+async def get_run_world(
+    run_id: str, world_id: str, repository: RunRepositoryDep
+) -> WorldInspectionResponse:
+    """Return one world with its action, outcome, evidence, and veto linkage.
+
+    Read-only. Everything it reports is already stored on the world; this route
+    stops hiding it behind counts. One call is enough for the whole proof chain,
+    which is why the Inspector makes exactly one.
+    """
+    return WorldInspectionResponse.from_domain(
+        run_id, await _require_world(repository, run_id, world_id)
+    )
+
+
+@router.get("/runs/{run_id}/worlds/{world_id}/evidence", response_model=WorldEvidenceResponse)
+async def get_world_evidence(
+    run_id: str, world_id: str, repository: RunRepositoryDep
+) -> WorldEvidenceResponse:
+    """A world's evidence alone.
+
+    The same records the inspection response carries, built by the same
+    serializer — a narrower fetch for a client that wants only evidence, never a
+    second opinion about it.
+    """
+    world = await _require_world(repository, run_id, world_id)
+    return WorldEvidenceResponse(
+        run_id=run_id,
+        world_id=world.world_id,
+        evidence=tuple(EvidenceResponse.from_domain(item) for item in world.evidence),
+    )
+
+
+@router.get(
+    "/runs/{run_id}/worlds/{world_id}/counterexamples",
+    response_model=WorldCounterexamplesResponse,
+)
+async def get_world_counterexamples(
+    run_id: str, world_id: str, repository: RunRepositoryDep
+) -> WorldCounterexamplesResponse:
+    """A world's counterexamples alone.
+
+    ``authoritative`` is still decided by the domain's own ``counterexample_vetoes``
+    against this world's evidence index, so the narrower route cannot disagree
+    with the full one about what an attack proved.
+    """
+    world = await _require_world(repository, run_id, world_id)
+    index = world.evidence_by_id
+    return WorldCounterexamplesResponse(
+        run_id=run_id,
+        world_id=world.world_id,
+        counterexamples=tuple(
+            CounterexampleResponse.from_domain(counterexample, index)
+            for counterexample in world.counterexamples
+        ),
     )
 
 
