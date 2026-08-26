@@ -13,7 +13,10 @@ import { vi } from "vitest";
 
 import type {
   ComparisonDetailDto,
+  CounterexampleDto,
+  EvidenceDto,
   HarnessTraceDto,
+  WorldInspectionDto,
   DemoStateDto,
   EventListDto,
   RunDto,
@@ -310,6 +313,8 @@ export function demoStateDto(flagEnabled = true): DemoStateDto {
 }
 
 export interface RouteTable {
+  /** World inspection payloads, keyed by world id. */
+  inspection?: Record<string, WorldInspectionDto>;
   harness?: HarnessTraceDto;
   run?: RunDto | (() => RunDto);
   worlds?: WorldsDto | null;
@@ -410,6 +415,15 @@ export function mockServer(initial: RouteTable = {}): MockServer {
       if (path === "/api/v1/runs") {
         const run = routes.run === undefined ? null : resolve(routes.run);
         return json({ runs: run === null ? [] : [run] });
+      }
+      // Must precede the /runs/ catch-all, which would otherwise answer with
+      // the run itself and hand the Inspector a payload of the wrong shape.
+      const worldDetail = /\/api\/v1\/runs\/[^/]+\/worlds\/([^/]+)$/.exec(path);
+      if (worldDetail !== null) {
+        const inspection = routes.inspection?.[worldDetail[1]!];
+        return inspection === undefined
+          ? json({ detail: `world ${worldDetail[1]} not found` }, 404)
+          : json(inspection);
       }
       if (path.endsWith("/harness-trace")) {
         return routes.harness === undefined
@@ -569,5 +583,262 @@ export function unreachableHarnessTrace(): HarnessTraceDto {
     trueforge_status: "unavailable",
     detail: "could not read 2 of 2 session(s)",
     entries: [],
+  };
+}
+
+/**
+ * A world inspection payload in the exact shape
+ * `GET /runs/{id}/worlds/{world_id}` returns.
+ *
+ * `world` is reused from `worldsDto()` so the fixture cannot drift from the
+ * list shape the same backend serves.
+ */
+function inspectionFor(
+  worldId: string,
+  evidence: EvidenceDto[],
+  counterexamples: CounterexampleDto[],
+): WorldInspectionDto {
+  const world = worldsDto().worlds.find((item) => item.world_id === worldId)!;
+  return { run_id: RUN_ID, world, evidence, counterexamples };
+}
+
+function evidenceDto(
+  overrides: Partial<EvidenceDto> & { evidence_id: string },
+): EvidenceDto {
+  return {
+    kind: "TEST_RESULT",
+    source: "branchpoint-counterexample-replay",
+    claim: "check: property holds",
+    world_id: "world_alpha",
+    observed: null,
+    expected: null,
+    passed: true,
+    severity: "INFO",
+    machine_verifiable: true,
+    disqualifying: false,
+    artifact: null,
+    recorded_at: "2026-08-26T18:42:12Z",
+    ...overrides,
+  };
+}
+
+function counterexampleDto(
+  overrides: Partial<CounterexampleDto> & { counterexample_id: string },
+): CounterexampleDto {
+  return {
+    world_id: "world_alpha",
+    title: "Rollback order-compatibility regression",
+    hypothesis: "Orders created under schema 41 may not deserialize under v2.40.",
+    status: "REPRODUCED",
+    reproduced: true,
+    authoritative: true,
+    created_at: "2026-08-26T18:42:12Z",
+    reproduction_steps: [],
+    evidence_ids: [],
+    supporting_evidence_ids: [],
+    ...overrides,
+  };
+}
+
+/**
+ * The complete TrueForge-backed chain: an exploratory sandbox record, failing
+ * replay evidence, an authoritative reproduced counterexample, and a veto.
+ */
+export function fullChainInspection(): WorldInspectionDto {
+  return inspectionFor(
+    "world_alpha",
+    [
+      evidenceDto({
+        evidence_id: "ev_sandbox",
+        source: "trueforge-doppelganger",
+        claim: "adversarial exploration performed in a TrueForge sandbox",
+        machine_verifiable: false,
+        passed: null,
+        observed: "subagents=1 sandboxes=1",
+      }),
+      evidenceDto({
+        evidence_id: "ev_schema",
+        claim: "schema_compatibility: all orders deserialize",
+        passed: false,
+        disqualifying: true,
+        severity: "CRITICAL",
+      }),
+      evidenceDto({
+        evidence_id: "ev_payment",
+        claim: "payment_retry: retry stays idempotent",
+        passed: false,
+        disqualifying: true,
+        severity: "CRITICAL",
+      }),
+    ],
+    [
+      counterexampleDto({
+        counterexample_id: "attack_alpha",
+        evidence_ids: ["ev_sandbox", "ev_schema", "ev_payment"],
+        supporting_evidence_ids: ["ev_schema", "ev_payment"],
+      }),
+    ],
+  );
+}
+
+/**
+ * The deterministic demo: a real veto with **no** exploratory stage, because
+ * the demo's attacker is a deterministic compatibility suite, not DOPPELGÄNGER.
+ */
+export function deterministicInspection(): WorldInspectionDto {
+  return inspectionFor(
+    "world_alpha",
+    [
+      evidenceDto({
+        evidence_id: "ev_demo_schema",
+        source: "hero-adversarial-tester",
+        claim: "order_deserialization_or_compatibility: orders deserialize",
+        passed: false,
+        disqualifying: true,
+        severity: "CRITICAL",
+      }),
+    ],
+    [
+      counterexampleDto({
+        counterexample_id: "attack_demo",
+        hypothesis: "",
+        evidence_ids: ["ev_demo_schema"],
+        supporting_evidence_ids: ["ev_demo_schema"],
+      }),
+    ],
+  );
+}
+
+/** An attack claiming reproduction with nothing qualifying behind it. */
+export function unsupportedClaimInspection(): WorldInspectionDto {
+  const inspection = inspectionFor(
+    "world_beta",
+    [
+      evidenceDto({
+        evidence_id: "ev_sandbox_only",
+        source: "trueforge-doppelganger",
+        claim: "sandbox script observed the invariant break",
+        machine_verifiable: false,
+        passed: null,
+      }),
+    ],
+    [
+      counterexampleDto({
+        counterexample_id: "attack_unsupported",
+        world_id: "world_beta",
+        reproduced: true,
+        authoritative: false,
+        evidence_ids: ["ev_sandbox_only"],
+        supporting_evidence_ids: [],
+      }),
+    ],
+  );
+  return { ...inspection, world: { ...inspection.world, veto: null } };
+}
+
+/** A world that survived: passing checks, no reproduced attack, no veto. */
+export function survivingInspection(): WorldInspectionDto {
+  return inspectionFor(
+    "world_beta",
+    [
+      evidenceDto({
+        evidence_id: "ev_healthy",
+        world_id: "world_beta",
+        claim: "healthy_checkout: error rate at most 2%",
+        passed: true,
+      }),
+    ],
+    [
+      counterexampleDto({
+        counterexample_id: "attack_beta",
+        world_id: "world_beta",
+        title: "No replayable counterexample found",
+        status: "NOT_REPRODUCED",
+        reproduced: false,
+        authoritative: false,
+      }),
+    ],
+  );
+}
+
+/**
+ * Exploratory evidence that did **not** come from the DOPPELGÄNGER.
+ *
+ * Non-machine-verifiable, so it is genuinely exploratory — but nothing about it
+ * says an adversarial agent ran, and the Inspector must not claim one did.
+ */
+export function nonDoppelgangerExploratoryInspection(): WorldInspectionDto {
+  return inspectionFor(
+    "world_alpha",
+    [
+      evidenceDto({
+        evidence_id: "ev_note",
+        source: "manual-note",
+        claim: "operator flagged this rollback as risky",
+        machine_verifiable: false,
+        passed: null,
+      }),
+      evidenceDto({
+        evidence_id: "ev_schema",
+        claim: "schema_compatibility: all orders deserialize",
+        passed: false,
+        disqualifying: true,
+        severity: "CRITICAL",
+      }),
+    ],
+    [
+      counterexampleDto({
+        counterexample_id: "attack_note",
+        hypothesis: "",
+        evidence_ids: ["ev_note", "ev_schema"],
+        supporting_evidence_ids: ["ev_schema"],
+      }),
+    ],
+  );
+}
+
+/**
+ * Two machine-verifiable records, only one of which the veto cites.
+ *
+ * The unlinked one passed and is unrelated to the conclusion; presenting it as
+ * the replay proof would overstate what BRANCHPOINT actually verified.
+ */
+export function partiallyLinkedInspection(): WorldInspectionDto {
+  const inspection = inspectionFor(
+    "world_alpha",
+    [
+      evidenceDto({
+        evidence_id: "ev_unrelated",
+        claim: "cost_budget: daily spend within budget",
+        passed: true,
+      }),
+      evidenceDto({
+        evidence_id: "ev_linked",
+        claim: "payment_retry: retry stays idempotent",
+        passed: false,
+        disqualifying: true,
+        severity: "CRITICAL",
+      }),
+    ],
+    [
+      counterexampleDto({
+        counterexample_id: "attack_linked",
+        evidence_ids: ["ev_unrelated", "ev_linked"],
+        supporting_evidence_ids: ["ev_linked"],
+      }),
+    ],
+  );
+  return {
+    ...inspection,
+    world: {
+      ...inspection.world,
+      veto: {
+        basis: "REPRODUCED_COUNTEREXAMPLE",
+        counterexample_id: "attack_linked",
+        evidence_ids: ["ev_linked"],
+        authoritative: true,
+        summary: "Payment retry idempotency regression",
+      },
+    },
   };
 }

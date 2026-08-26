@@ -187,14 +187,13 @@ export interface World {
   recommended: boolean;
   notes: string[];
   /**
-   * Whether `evidence` and `counterexample.hypothesis` hold real rows.
+   * Rows only the fixture carries. A world adapted from the run list has none:
+   * evidence detail comes from `GET /runs/{id}/worlds/{world_id}`, which the
+   * Inspector fetches for the selected world alone.
    *
-   * The current HTTP API exposes per-world evidence *counts*, not the rows
-   * themselves. When this is false the UI says so in words rather than
-   * rendering empty or invented evidence — `evidenceCount` and
-   * `reproducedCounterexamples` stay live and authoritative either way.
+   * `evidenceCount` and `reproducedCounterexamples` stay live and authoritative
+   * either way — they are summary facts the list really does carry.
    */
-  evidenceDetailAvailable: boolean;
   evidenceCount: number;
   reproducedCounterexamples: number;
 }

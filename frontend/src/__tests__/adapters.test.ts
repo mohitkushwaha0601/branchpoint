@@ -110,9 +110,10 @@ describe("no fixture data leaks into a live run", () => {
   });
 
   it("carries no evidence rows the API did not send", () => {
+    // The list endpoint carries counts, not rows. Rows come from the world
+    // detail endpoint, which the Inspector fetches for the selected world.
     for (const world of live.worlds) {
       expect(world.evidence).toEqual([]);
-      expect(world.evidenceDetailAvailable).toBe(false);
     }
     // ...while the counts that *are* real stay real.
     expect(live.worlds.map((world) => world.evidenceCount)).toEqual([3, 6, 4]);

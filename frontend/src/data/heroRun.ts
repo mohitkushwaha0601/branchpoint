@@ -110,7 +110,6 @@ const worldAlpha: World = {
   notes: [
     "Goal achieved, but the rollback breaks records written by the newer schema.",
   ],
-  evidenceDetailAvailable: true,
   evidenceCount: 3,
   reproducedCounterexamples: 1,
 };
@@ -239,7 +238,6 @@ const worldBeta: World = {
   ],
   recommended: true,
   notes: ["All declared invariants pass."],
-  evidenceDetailAvailable: true,
   evidenceCount: 6,
   reproducedCounterexamples: 0,
 };
@@ -350,7 +348,6 @@ const worldGamma: World = {
   ],
   recommended: false,
   notes: ["Goal not fully achieved.", "Extra cost."],
-  evidenceDetailAvailable: true,
   evidenceCount: 4,
   reproducedCounterexamples: 0,
 };

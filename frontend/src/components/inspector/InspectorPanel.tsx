@@ -6,10 +6,18 @@
 import { PanelRightClose, X } from "lucide-react";
 
 import { useRunView } from "../../app/runView";
+import { useWorldInspection } from "../../hooks/useWorldInspection";
 import { WorldInspector } from "./WorldInspector";
 
 function InspectorBody() {
   const { run, selectedWorld, selectedStageId } = useRunView();
+  // Lazy and per selection: one detail request for the world in front of the
+  // reviewer, never one per world in the graph. A fixture run has no backend to
+  // ask, so it is not asked.
+  const inspection = useWorldInspection(
+    run.source === "live" ? run.runId : undefined,
+    selectedWorld?.worldId,
+  );
 
   // A run is readable the moment it is created, long before it has forked.
   if (selectedWorld === null) {
@@ -43,6 +51,7 @@ function InspectorBody() {
       selectedStage={selectedStage}
       recommended={selectedWorld.recommended}
       comparatorNote={comparatorNote}
+      inspection={inspection}
     />
   );
 }

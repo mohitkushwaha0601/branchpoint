@@ -158,7 +158,7 @@ export function WorldLane({
             <AuthorityBadge authority="VERIFIED" />
           </div>
           <div className="mt-0.5">
-            {world.evidenceDetailAvailable ? (
+            {world.evidence.length > 0 ? (
               <>
                 {shown.map((item) => (
                   <div

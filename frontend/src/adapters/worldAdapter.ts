@@ -1,12 +1,12 @@
 /**
  * Backend world DTOs → the Phase 4.1 `World` view model.
  *
- * The gap this closes honestly: the HTTP API exposes a world's verdict, its
- * measured outcome, and *counts* of evidence and reproduced counterexamples —
- * but not the evidence rows themselves, not the adversary's hypothesis text,
- * and not per-job durations. None of that is invented here. Worlds adapted from
- * a live run carry `evidenceDetailAvailable: false`, and the UI says so in
- * words. `heroRun`'s values are never borrowed to fill a gap.
+ * The gap this closes honestly: the *list* endpoint exposes a world's verdict,
+ * its measured outcome, and counts — not the evidence rows, not the adversary's
+ * hypothesis text, and not per-job durations. None of that is invented here,
+ * and `heroRun`'s values are never borrowed to fill a gap. The rows live behind
+ * `GET /runs/{id}/worlds/{world_id}`, which the Inspector fetches for the
+ * selected world.
  */
 
 import type {
@@ -230,7 +230,8 @@ export function adaptWorldDetail(
     evidence: [],
     recommended: dto.world_id === context.recommendedWorldId,
     notes: [],
-    evidenceDetailAvailable: false,
+    // No rows here by construction: the list endpoint carries counts, and the
+    // Inspector fetches the rows for the one world it is showing.
     evidenceCount: dto.evidence_count,
     reproducedCounterexamples: dto.reproduced_counterexamples,
   };

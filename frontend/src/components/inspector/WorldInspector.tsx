@@ -11,7 +11,9 @@ import {
   pipelineDescriptor,
   verdictDescriptor,
 } from "../run/StatusBadge";
+import type { WorldInspectionState } from "../../hooks/useWorldInspection";
 import { EvidenceInspector } from "./EvidenceInspector";
+import { ProofChain, SupportingEvidence } from "./ProofChain";
 
 /** Empty means the API did not carry the value, and says so on screen. */
 function dash(value: string): string {
@@ -63,12 +65,20 @@ export function WorldInspector({
   selectedStage,
   recommended,
   comparatorNote,
+  inspection,
 }: {
   world: World;
   selectedStage: PipelineStage | null;
   recommended: boolean;
   comparatorNote: string;
+  /**
+   * Detail fetched for this world, kept separate from the summary above it.
+   * Absent on the offline fixture route and whenever the fetch failed — in both
+   * cases the summary and verdict remain fully usable.
+   */
+  inspection?: WorldInspectionState;
 }) {
+  const detail = inspection?.data ?? null;
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="px-4 pt-4 pb-3">
@@ -89,6 +99,31 @@ export function WorldInspector({
           <p className="mt-2 text-[12px] text-fg-dim">{world.verdictReason}</p>
         ) : null}
       </div>
+
+      {detail !== null ? <ProofChain inspection={detail} /> : null}
+
+      {detail === null && inspection?.loading ? (
+        <Section heading="PROOF CHAIN">
+          <p className="flex items-center gap-2 text-[11px] text-fg-dim">
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-run bp-pulse"
+              aria-hidden="true"
+            />
+            Loading evidence…
+          </p>
+        </Section>
+      ) : null}
+
+      {detail === null && inspection?.error ? (
+        <Section heading="PROOF CHAIN">
+          <p className="text-[11px] leading-relaxed text-fg-dim">
+            Evidence detail unavailable.
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-fg-faint">
+            The verdict and summary above are unaffected.
+          </p>
+        </Section>
+      ) : null}
 
       {selectedStage ? (
         <Section heading="SELECTED STEP">
@@ -188,7 +223,7 @@ export function WorldInspector({
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-[11px] text-fg-faint">Sandbox</dt>
             <dd className="font-mono text-[11px] text-fg-dim">
-              {world.evidenceDetailAvailable ? world.sandbox.status : "—"}
+              {world.evidence.length > 0 ? world.sandbox.status : "—"}
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-3">
@@ -212,12 +247,16 @@ export function WorldInspector({
         </dl>
       </Section>
 
-      <div className="border-t border-edge-muted px-4 py-3">
-        <EvidenceInspector
-          evidence={world.evidence}
-          detailAvailable={world.evidenceDetailAvailable}
-        />
-      </div>
+      {detail !== null ? (
+        <SupportingEvidence evidence={detail.evidence} />
+      ) : (
+        <div className="border-t border-edge-muted px-4 py-3">
+          <EvidenceInspector
+            evidence={world.evidence}
+            detailAvailable={world.evidence.length > 0}
+          />
+        </div>
+      )}
 
       <footer className="mt-auto border-t border-edge-muted px-4 py-3">
         <p className="text-[11px] leading-relaxed text-fg-faint">
