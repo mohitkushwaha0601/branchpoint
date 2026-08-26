@@ -88,13 +88,15 @@ describe("routing", () => {
     expect(await screen.findByText("UNREACHABLE")).toBeInTheDocument();
   });
 
-  it("leaves everything behind the backend as UNKNOWN", async () => {
+  it("leaves everything behind the backend as NOT EXPOSED", async () => {
     serveFullRun();
     renderApp("/system");
 
     await screen.findByText("HEALTHY");
-    // TrueForge, MCP, sandbox, model: never contacted from the browser.
-    expect(screen.getAllByText("UNKNOWN")).toHaveLength(4);
+    // TrueForge, MCP, sandbox, model: never contacted from the browser. They
+    // read NOT EXPOSED rather than UNKNOWN — their health is not in doubt, it
+    // is deliberately not observable from here.
+    expect(screen.getAllByText("NOT EXPOSED")).toHaveLength(4);
     expect(screen.getByText("TrueForge harness")).toBeInTheDocument();
   });
 

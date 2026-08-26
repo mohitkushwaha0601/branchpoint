@@ -3,11 +3,12 @@
  *
  * Only BRANCHPOINT's own `/health` is reachable from a browser. TrueForge, the
  * sandbox provider, and the model provider sit behind the backend and are never
- * contacted from here — their status stays `UNKNOWN` until BRANCHPOINT exposes
- * one itself, which is more honest than a green tick this page cannot justify.
+ * contacted from here — they read `NOT EXPOSED`, which is both more honest than
+ * a green tick this page cannot justify and more accurate than `UNKNOWN`: their
+ * health is not in doubt, it is deliberately not observable from here.
  */
 
-import { Check, CircleDashed, X } from "lucide-react";
+import { Check, CircleDashed, EyeOff, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ApiError, isAbortError } from "../api/errors";
@@ -101,15 +102,22 @@ export function SystemPage() {
               key={component.name}
               className="flex items-center gap-3 border-b border-edge-muted px-3 py-2.5"
             >
-              <CircleDashed className="h-3.5 w-3.5 text-fg-faint" aria-hidden="true" />
+              {/* Not the CircleDashed the backend row uses while it is still
+                  checking: these are never going to resolve from a browser, and
+                  sharing the pending glyph made a settled, deliberate state look
+                  like a request that never came back. */}
+              <EyeOff className="h-3.5 w-3.5 text-fg-faint" aria-hidden="true" />
               <span className="flex-1">
                 <span className="block text-[13px] text-fg">{component.name}</span>
                 <span className="block font-mono text-[11px] text-fg-faint">
                   {component.detail}
                 </span>
               </span>
+              {/* "NOT EXPOSED" is the accurate word. These components are not
+                  of unknown health — they are deliberately unreachable from the
+                  browser, which is a property of the design, not a gap in it. */}
               <span className="font-mono text-[10px] tracking-[0.1em] text-fg-faint">
-                UNKNOWN
+                NOT EXPOSED
               </span>
             </li>
           ))}

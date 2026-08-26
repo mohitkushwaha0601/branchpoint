@@ -225,18 +225,18 @@ describe("evidence authority under live data", () => {
       alpha.getByRole("region", { name: "BRANCHPOINT replay evidence" }),
     );
     expect(replay.getByText("VERIFIED")).toBeInTheDocument();
-    // The count is live; the rows behind it are not exposed.
+    // The count is live; the rows behind it are on the world-detail resource.
     expect(replay.getByText("reproduced counterexamples")).toBeInTheDocument();
   });
 
-  it("says evidence detail is unavailable rather than showing an empty list", async () => {
+  it("says where evidence rows load from rather than showing an empty list", async () => {
     serveSettledRun();
     renderApp(`/runs/${RUN_ID}`);
 
     await screen.findByRole("heading", { level: 1, name: "Checkout Regression" });
     await waitFor(() =>
       expect(
-        within(inspector()).getByText("Detailed evidence unavailable from current API."),
+        within(inspector()).getByText("Evidence rows load with this world’s detail."),
       ).toBeInTheDocument(),
     );
   });

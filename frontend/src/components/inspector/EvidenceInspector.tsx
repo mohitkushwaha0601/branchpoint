@@ -50,7 +50,7 @@ export function EvidenceInspector({
           EVIDENCE
         </h4>
         <p className="text-[11px] leading-relaxed text-fg-dim">
-          Detailed evidence unavailable from current API.
+          Evidence rows load with this world&rsquo;s detail.
         </p>
         <p className="text-[11px] leading-relaxed text-fg-faint">
           The counts above are live and authoritative. The authority boundary is

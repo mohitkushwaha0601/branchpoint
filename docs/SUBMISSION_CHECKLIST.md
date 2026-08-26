@@ -17,7 +17,7 @@ cd backend  && uv run pytest && uv run ruff check . && uv run ruff format --chec
 cd frontend && npm run typecheck && npm run test -- --run && npm run build
 ```
 
-Expected: **556 backend**, **156 frontend**, lint and build clean.
+Expected: **556 backend**, **163 frontend**, lint and build clean.
 
 ## Demo — one live run, end to end
 

@@ -7,7 +7,7 @@
  * colour and no motion at all.
  */
 
-import { Fragment } from "react";
+import { Fragment, useEffect, useRef } from "react";
 
 import type { Stage } from "../../types/run";
 import { StatusIcon, stageDescriptor } from "./StatusBadge";
@@ -20,8 +20,27 @@ const TEXT_BY_STATUS = {
 } as const;
 
 export function StageRail({ stages }: { stages: Stage[] }) {
+  const railRef = useRef<HTMLElement>(null);
+  const currentStageId = stages.find((stage) => stage.status === "current")?.id;
+  // The rail scrolls horizontally and hides its scrollbar, so when the panes
+  // narrow it (an Inspector docked at 1024 clips COMMIT and VERIFY) there is no
+  // affordance saying more stages exist. Keeping the current stage in view as
+  // the run advances is the behaviour that actually matters: the rail follows
+  // the run instead of stranding the reader at OBSERVE.
+  useEffect(() => {
+    const rail = railRef.current;
+    if (rail === null || currentStageId === undefined) return;
+    const node = rail.querySelector('[aria-current="step"]');
+    // Guarded because jsdom does not implement scrollIntoView, and a purely
+    // cosmetic scroll must never be the thing that throws in a render pass.
+    if (typeof node?.scrollIntoView === "function") {
+      node.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [currentStageId]);
+
   return (
     <nav
+      ref={railRef}
       aria-label="Run stages"
       className="flex items-center overflow-x-auto border-b border-edge bg-surface px-5 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >

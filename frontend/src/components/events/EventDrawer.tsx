@@ -88,12 +88,14 @@ function EvidenceTab() {
   const all = run.worlds.flatMap((world) =>
     world.evidence.map((item) => ({ world, item })),
   );
-  // Live runs carry counts, not rows: say which, rather than showing an empty
-  // table that reads as "this run produced no evidence".
+  // Live runs carry counts here, not rows: the evidence records live on the
+  // world-detail resource the Inspector fetches per world. Say where they are
+  // rather than showing an empty table that reads as "this run produced no
+  // evidence" — or claiming an API gap that does not exist.
   if (all.length === 0) {
     return (
       <div className="px-2 font-mono text-[11px] text-fg-dim">
-        <p>Detailed evidence unavailable from current API.</p>
+        <p>Evidence rows load per world. Open a world in the Inspector to read them.</p>
         <table className="mt-2 w-full">
           <thead>
             <tr className="text-left text-fg-faint">

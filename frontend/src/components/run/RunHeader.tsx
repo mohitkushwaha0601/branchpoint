@@ -70,7 +70,7 @@ export function RunHeader({ run }: { run: Run }) {
           |
         </span>
         <span>
-          {vetoed} veto{vetoed === 1 ? "" : "s"}
+          {vetoed} veto{vetoed === 1 ? "" : "es"}
         </span>
         <span aria-hidden="true" className="text-edge">
           |

@@ -44,7 +44,7 @@ because imagination cannot become permission.
 |---|---|
 | Deterministic domain invariants | `backend/app/domain/` — frozen models, asserted transitions |
 | **556 backend tests** | `cd backend && uv run pytest` |
-| **156 frontend tests** | `cd frontend && npm run test -- --run` |
+| **163 frontend tests** | `cd frontend && npm run test -- --run` |
 | Exact action fingerprinting | `CandidateAction.fingerprint()` — SHA-256 of canonical content |
 | One-use commit capability | `app/infrastructure/demo/capability.py`, consumed atomically |
 | Typed APIs end to end | Pydantic response models; strict TS with `noUncheckedIndexedAccess` |

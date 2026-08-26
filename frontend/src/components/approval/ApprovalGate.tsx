@@ -30,7 +30,7 @@ import type { Run } from "../../types/run";
 function HumanRejection({ run }: { run: Run }) {
   const { approval } = run;
   return (
-    <footer role="status" className="border-t border-edge-muted px-4 py-3">
+    <footer role="status" className="shrink-0 border-t border-edge-muted px-4 py-3">
       <p className="flex items-center gap-2">
         <UserX className="h-4 w-4 text-gate" strokeWidth={2.5} aria-hidden="true" />
         <span className="font-mono text-[11px] font-semibold tracking-[0.1em] text-gate">
@@ -73,7 +73,7 @@ function CommitProgress({ run }: { run: Run }) {
   if (stage === null) return null;
 
   return (
-    <footer role="status" className="border-t border-edge-muted px-4 py-3">
+    <footer role="status" className="shrink-0 border-t border-edge-muted px-4 py-3">
       <p className={`flex items-center gap-2 text-[12px] ${stage.tone}`}>
         {stage.done ? (
           run.status === "SUCCEEDED" ? (
@@ -124,6 +124,16 @@ export function ApprovalGate() {
   useEffect(() => {
     if (rejecting) reasonRef.current?.focus();
   }, [rejecting]);
+  // Escape backs out of the reason panel, the way it would leave a dialog.
+  // Only while the panel is open, so it never swallows the key otherwise.
+  useEffect(() => {
+    if (!rejecting) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRejecting(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rejecting]);
   const { approval } = run;
   const world = run.worlds.find((candidate) => candidate.worldId === approval.worldId);
 
@@ -136,9 +146,24 @@ export function ApprovalGate() {
   return (
     <section
       aria-labelledby="approval-heading"
-      className="mx-5 mb-6 rounded-panel border border-gate-dim bg-surface"
+      /* While a decision is outstanding the gate pins to the bottom of the
+         canvas. It is the point of the whole run, and it used to sit ~500px
+         below the fold behind three world lanes — reachable only by scrolling
+         past the very evidence it is asking you to act on. Pinned, the branches
+         still scroll above it and the decision is never hunted for. Sticky
+         keeps it inside `main`, so the drawer (a flex sibling) still cannot
+         cover it, and growing the reason panel expands upward from the pin. */
+      className={`mx-5 rounded-panel border border-gate-dim bg-surface ${
+        pending
+          ? // Capped at 70% of the canvas so the gate can never swallow the
+            // branch graph on a short viewport with the drawer expanded. The
+            // header and the decision row are outside the scroll area, so the
+            // buttons stay put no matter how the detail block is sized.
+            "sticky bottom-0 z-20 mb-5 flex max-h-[55%] flex-col shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.9)]"
+          : "mb-6"
+      }`}
     >
-      <header className="flex items-center gap-2 border-b border-edge-muted px-4 py-2.5">
+      <header className="flex shrink-0 items-center gap-2 border-b border-edge-muted px-4 py-2">
         <Diamond className="h-3.5 w-3.5 text-gate" aria-hidden="true" />
         <h2
           id="approval-heading"
@@ -148,7 +173,7 @@ export function ApprovalGate() {
         </h2>
       </header>
 
-      <div className="grid gap-5 px-4 py-4 md:grid-cols-2">
+      <div className="grid min-h-0 gap-x-5 gap-y-3 overflow-y-auto px-4 py-3 md:grid-cols-2">
         <div>
           <p className="font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint">
             RECOMMENDED WORLD
@@ -161,7 +186,11 @@ export function ApprovalGate() {
           <p className="mt-1 text-[13px] text-fg">
             {world.label.replace("WORLD ", "World ")} — {world.name}
           </p>
-          <ul className="mt-3 space-y-1">
+          {/* One column on purpose. Two fitted in ~35px less height but broke
+              "No reproduced counterexamples" and "Deterministic comparator
+              recommendation" across lines, and a ragged safety checklist is a
+              worse trade than a slightly taller panel. */}
+          <ul className="mt-2 space-y-0.5">
             {approval.checks.map((check) => (
               <li key={check.label} className="flex items-center gap-2">
                 {check.satisfied ? (
@@ -193,29 +222,34 @@ export function ApprovalGate() {
             BOUND ACTION
           </p>
           <p className="mt-1 text-[13px] text-fg">{world.name}</p>
-          <dl className="mt-3 space-y-0.5">
+          <dl className="mt-2 space-y-0.5">
             <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-[11px] text-fg-faint">World id</dt>
-              <dd className="font-mono text-[11px] text-fg-dim">
+              <dt className="shrink-0 text-[11px] text-fg-faint">World id</dt>
+              <dd className="truncate font-mono text-[11px] text-fg-dim">
                 {approval.worldId}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-[11px] text-fg-faint">Action id</dt>
-              <dd className="font-mono text-[11px] text-fg-dim">
+              <dt className="shrink-0 text-[11px] text-fg-faint">Action id</dt>
+              <dd className="truncate font-mono text-[11px] text-fg-dim">
                 {approval.actionId}
               </dd>
             </div>
-            <div className="flex items-baseline justify-between gap-3">
+            {/* On its own line and allowed to break: the fingerprint is a
+                64-character SHA-256, and as a right-aligned cell it ran off the
+                column and was clipped mid-hash. It is the one value here whose
+                exact characters are the point, so it gets the full width and
+                wraps rather than being silently truncated. */}
+            <div className="pt-0.5">
               <dt className="text-[11px] text-fg-faint">Fingerprint</dt>
-              <dd className="font-mono text-[11px] text-fg-dim">
+              <dd className="font-mono text-[11px] leading-snug break-all text-fg-dim">
                 {approval.actionFingerprint || "—"}
               </dd>
             </div>
           </dl>
-          <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-            These three values are sent back as confirmation. BRANCHPOINT commits
-            the action they identify and nothing else.
+          <p className="mt-1.5 text-[11px] leading-snug text-fg-faint">
+            Sent back as confirmation. BRANCHPOINT commits the action they
+            identify and nothing else.
           </p>
         </div>
       </div>
@@ -252,7 +286,7 @@ export function ApprovalGate() {
         <HumanRejection run={run} />
       ) : pending && !approvalSubmitted ? (
         rejecting ? (
-          <footer className="border-t border-edge-muted px-4 py-3">
+          <footer className="shrink-0 border-t border-edge-muted px-4 py-3">
             <label
               htmlFor="rejection-reason"
               className="font-mono text-[10px] font-semibold tracking-[0.14em] text-fg-faint"
@@ -285,7 +319,10 @@ export function ApprovalGate() {
                 type="button"
                 onClick={() => reject(reason)}
                 disabled={approving}
-                className="inline-flex items-center gap-2 rounded-md border border-gate-dim bg-gate/15 px-3 py-1.5 text-[12px] font-medium text-gate transition-colors hover:bg-gate/25 disabled:cursor-not-allowed disabled:opacity-60"
+                /* Fixed footprint: "Confirm rejection" and "Submitting…" are
+                   very different widths, and a control that shrinks under the
+                   cursor at the moment it is pressed reads as a glitch. */
+                className="inline-flex min-w-[148px] items-center justify-center gap-2 rounded-md border border-gate-dim bg-gate/15 px-3 py-1.5 text-[12px] font-medium text-gate transition-colors hover:bg-gate/25 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {approving ? (
                   <Loader className="h-3.5 w-3.5 bp-pulse" strokeWidth={2.5} aria-hidden="true" />
@@ -295,7 +332,7 @@ export function ApprovalGate() {
             </div>
           </footer>
         ) : (
-          <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-edge-muted px-4 py-3">
+          <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-edge-muted px-4 py-3">
             <p className="mr-auto font-mono text-[10px] font-semibold tracking-[0.12em] text-fg-faint">
               AWAITING HUMAN DECISION
             </p>
@@ -311,7 +348,8 @@ export function ApprovalGate() {
               type="button"
               onClick={approve}
               disabled={approving}
-              className="inline-flex items-center gap-2 rounded-md border border-ok-dim bg-ok/15 px-3 py-1.5 text-[12px] font-medium text-ok transition-colors hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-60"
+              /* Same fixed footprint, for the same reason. */
+              className="inline-flex min-w-[148px] items-center justify-center gap-2 rounded-md border border-ok-dim bg-ok/15 px-3 py-1.5 text-[12px] font-medium text-ok transition-colors hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {approving ? (
                 <Loader className="h-3.5 w-3.5 bp-pulse" strokeWidth={2.5} aria-hidden="true" />

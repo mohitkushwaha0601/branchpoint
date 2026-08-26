@@ -18,11 +18,19 @@ import {
 } from "../run/StatusBadge";
 import { PipelineNode } from "./PipelineNode";
 
-/** What to say when the adversary's own words are not exposed by the API. */
+/**
+ * What to say when the adversary's own words are not in the payload this lane
+ * renders from.
+ *
+ * They are not missing from the product: the run summary carries counts, and
+ * the hypothesis lives on `GET /runs/{id}/worlds/{world_id}`, which the
+ * Inspector fetches when a world is opened. So this says where to find it
+ * rather than reporting an API deficiency that does not exist.
+ */
 const CX_LABEL: Record<string, string> = {
-  REPRODUCED: "Counterexample proposed. Hypothesis text unavailable from current API.",
+  REPRODUCED: "Counterexample proposed. Open this world to read the hypothesis.",
   NOT_REPRODUCED:
-    "Counterexample proposed. Hypothesis text unavailable from current API.",
+    "Counterexample proposed, not reproduced. Open this world to read it.",
   ERROR: "Proposed counterexample was rejected as malformed.",
   NONE_PROPOSED: "No replayable counterexample proposed.",
 };
@@ -53,6 +61,7 @@ export function WorldLane({
   return (
     <section
       aria-label={`${world.label} — ${world.name}`}
+      style={{ containerType: "inline-size" }}
       onMouseEnter={() => onHoverChange(true)}
       onMouseLeave={() => onHoverChange(false)}
       onClick={onSelectWorld}
@@ -80,7 +89,10 @@ export function WorldLane({
             {world.name}
           </span>
         </button>
-        <code className="ml-auto shrink-0 font-mono text-[10px] text-fg-faint">
+        <code
+          title={world.worldId}
+          className="ml-auto max-w-[40%] truncate font-mono text-[10px] text-fg-faint"
+        >
           {world.worldId}
         </code>
       </header>
@@ -131,7 +143,7 @@ export function WorldLane({
         ))}
       </div>
 
-      <div className="grid gap-x-4 gap-y-1.5 border-t border-edge-muted px-3 py-1.5 sm:grid-cols-2">
+      <div className="grid gap-x-4 gap-y-1.5 border-t border-edge-muted px-3 py-1.5 @[26rem]:grid-cols-2">
         <section aria-label="DOPPELGÄNGER evidence" className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="font-mono text-[10px] font-semibold tracking-[0.1em] text-fg-faint">
@@ -180,9 +192,10 @@ export function WorldLane({
                 ) : null}
               </>
             ) : (
-              /* Counts are live and authoritative; the rows behind them are not
-                 exposed by the current API, so they are named as missing rather
-                 than rendered as empty or invented. */
+              /* Counts are live and authoritative. The rows behind them are on
+                 the world-detail resource the Inspector fetches on selection,
+                 so the lane shows the counts it actually has rather than an
+                 empty table that would read as "this world produced nothing". */
               <>
                 <div className="flex items-baseline justify-between gap-3 font-mono text-[11px] leading-snug">
                   <span className="text-fg-dim">reproduced counterexamples</span>

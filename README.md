@@ -157,7 +157,7 @@ provider's key lives in TrueForge; BRANCHPOINT holds none.
 | | |
 |---|---|
 | Backend | **556** deterministic tests (`pytest`) |
-| Frontend | **156** tests (`vitest` + Testing Library, `fetch` mocked) |
+| Frontend | **163** tests (`vitest` + Testing Library, `fetch` mocked) |
 
 No test makes a model, network, TrueForge, or Daytona call.
 
