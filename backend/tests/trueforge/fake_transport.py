@@ -190,6 +190,28 @@ class FakeTrueForge:
             self._turn_by_id[turn_id] = turn
             return httpx.Response(200, json={"data": {"id": turn_id}})
 
+        # Session-level events. TrueForge 0.1.4 wraps each one in a
+        # {"turn_id": ..., "event": {...}} envelope here, unlike the per-turn
+        # log below — serving the bare event would let a parser that ignores
+        # the envelope pass in tests and fail against the real harness, which
+        # is exactly what happened.
+        if (
+            path.startswith("/api/v1/sessions/")
+            and path.endswith("/events")
+            and ("/turns/" not in path)
+        ):
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"turn_id": turn_id, "event": event}
+                        for turn_id, turn in self._turn_by_id.items()
+                        for event in turn.events
+                    ]
+                },
+            )
+
+        # Per-turn events: bare event objects, no envelope.
         if path.endswith("/events"):
             turn_id = path.split("/turns/")[1].split("/")[0]
             turn = self._turn_by_id.get(turn_id)

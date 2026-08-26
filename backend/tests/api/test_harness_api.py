@@ -6,7 +6,9 @@ here: same run id in, same session ids out, and no second drive scheduled.
 """
 
 from collections.abc import AsyncIterator
+from typing import Any
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -26,6 +28,7 @@ from app.infrastructure.demo.adapters import DemoRealityReader, DemoWorldExecuto
 from app.infrastructure.demo.engine import DemoProductionEngine
 from app.infrastructure.demo.hero import HeroAdversarialTester, HeroCandidatePlanner
 from app.infrastructure.persistence.memory import InMemoryEventSink, InMemoryRunRepository
+from app.infrastructure.trueforge.client import TrueForgeClient
 from app.infrastructure.trueforge.errors import TrueForgeUnavailableError
 from app.infrastructure.trueforge.models import TurnEvent
 from app.infrastructure.trueforge.sessions import (
@@ -125,6 +128,15 @@ async def harness(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[Harness]:
         yield Harness(http, repository, bindings, runner, trueforge)
     await runner.cancel_all()
     app.dependency_overrides.clear()
+
+
+def wire_client(payload: Any) -> TrueForgeClient:
+    """A real TrueForgeClient whose session-events endpoint returns ``payload``."""
+    http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)),
+        base_url="http://trueforge.test",
+    )
+    return TrueForgeClient(base_url="http://trueforge.test", http_client=http_client)
 
 
 async def start_run(harness: Harness) -> str:
@@ -250,3 +262,96 @@ async def test_a_reread_run_keeps_its_state_and_worlds(harness: Harness) -> None
     assert first["status"] == second["status"] == "AWAITING_APPROVAL"
     assert [w["world_id"] for w in first["worlds"]] == [w["world_id"] for w in second["worlds"]]
     assert first["approval"]["action_fingerprint"] == second["approval"]["action_fingerprint"]
+
+
+# ----- the live wire, through the route ----------------------------------------
+
+
+async def test_a_live_session_envelope_reaches_the_route_as_real_rows(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real client, the real wire shape, the real endpoint.
+
+    Every other test on this route stubs the client, so none of them read a
+    byte of TrueForge's actual envelope. This one serves the shape captured
+    from a live 0.1.4 instance over an in-memory transport.
+    """
+    run_id = await start_run(harness)
+    monkeypatch.setattr(
+        harness_route,
+        "get_trueforge_client",
+        lambda: wire_client(
+            {
+                "data": [
+                    {
+                        "turn_id": "01m0yskstsrsy9xh2ex71rmyn9.local",
+                        "event": {
+                            "type": "sandbox.created",
+                            "id": "event_sandbox",
+                            "created_at": "2026-08-26T10:25:21.000Z",
+                            "thread_id": "main",
+                            "sandbox_id": "v1:daytona:4a19c72e",
+                        },
+                    }
+                ]
+            }
+        ),
+    )
+
+    response = await harness.http.get(f"/api/v1/runs/{run_id}/harness-trace")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["trueforge_status"] == "available"
+    assert any(entry["category"] == "SANDBOX_CREATED" for entry in body["entries"])
+
+
+async def test_an_unreadable_envelope_returns_200_not_500(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exact production failure, pinned at the HTTP boundary.
+
+    An envelope the client cannot parse used to raise Pydantic's
+    ``ValidationError``, which is not a ``TrueForgeError`` and so escaped the
+    service's degradation handler and became a 500 — taking the run page with
+    it. It must degrade instead.
+    """
+    run_id = await start_run(harness)
+    monkeypatch.setattr(
+        harness_route,
+        "get_trueforge_client",
+        lambda: wire_client({"data": [{"turn_id": "x", "event": {"id": "e"}}]}),
+    )
+
+    response = await harness.http.get(f"/api/v1/runs/{run_id}/harness-trace")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["trueforge_status"] == "unavailable"
+    assert body["entries"] == []
+    # The page still has BRANCHPOINT's own bindings to show.
+    assert {s["trueforge_session_id"] for s in body["sessions"]} == {
+        "sess_planner",
+        "sess_alpha",
+    }
+
+
+async def test_an_unreadable_envelope_leaks_nothing_into_the_response(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parse failure must not become a redaction hole.
+
+    The detail line reports that a session could not be read. The event that
+    could not be read carries model output and tool payloads, and none of it
+    belongs in a browser response.
+    """
+    run_id = await start_run(harness)
+    monkeypatch.setattr(
+        harness_route,
+        "get_trueforge_client",
+        lambda: wire_client({"data": [{"turn_id": "x", "event": {"id": "e", "content": SECRET}}]}),
+    )
+
+    raw = (await harness.http.get(f"/api/v1/runs/{run_id}/harness-trace")).text
+
+    assert SECRET not in raw

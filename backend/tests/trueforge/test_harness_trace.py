@@ -14,9 +14,11 @@ events, and the real client parses them.
 
 import json
 
+import httpx
 import pytest
 
 from app.application.orchestration.harness_trace import HarnessTraceService
+from app.infrastructure.trueforge.client import TrueForgeClient
 from app.infrastructure.trueforge.errors import TrueForgeUnavailableError
 from app.infrastructure.trueforge.harness import (
     HarnessCategory,
@@ -425,3 +427,68 @@ async def test_entries_are_ordered_by_trueforges_own_timestamps() -> None:
         "2026-08-26T18:00:00Z",
         "2026-08-26T18:42:00Z",
     ]
+
+
+# ----- the whole path, over a real transport -----------------------------------
+#
+# Everything above stubs the client. That is exactly why a live TrueForge could
+# return an envelope this code could not read while every test here stayed
+# green. These two drive the real client over an in-memory transport.
+
+
+def session_events_client(payload: object) -> TrueForgeClient:
+    """A real client whose session-events endpoint returns ``payload``."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handle), base_url="http://trueforge.test"
+    )
+    return TrueForgeClient(base_url="http://trueforge.test", http_client=http_client)
+
+
+async def test_the_trace_reads_the_real_session_envelope_end_to_end() -> None:
+    """The live wire shape, through the real client, into redacted rows."""
+    client = session_events_client(
+        {
+            "data": [
+                {
+                    "turn_id": "01m0yskstsrsy9xh2ex71rmyn9.local",
+                    "event": {
+                        "type": "sandbox.created",
+                        "id": "event_sandbox",
+                        "created_at": "2026-08-26T10:25:21.000Z",
+                        "thread_id": "main",
+                        "sandbox_id": "v1:daytona:4a19c72e",
+                    },
+                }
+            ]
+        }
+    )
+    service = HarnessTraceService(client=client, bindings=await bound_store())
+
+    trace = await service.trace("run_1")
+
+    assert trace.trueforge_status == "available"
+    sandboxes = [e for e in trace.entries if e.category is HarnessCategory.SANDBOX_CREATED]
+    assert sandboxes and sandboxes[0].sandbox_id == "v1:daytona:4a19c72e"
+
+
+async def test_an_unreadable_session_degrades_the_trace_instead_of_raising() -> None:
+    """A malformed envelope must not become an HTTP 500 on the run page.
+
+    The regression that shipped: Pydantic's ``ValidationError`` is not a
+    ``TrueForgeError``, so it walked past this service's handler and out of the
+    route. Now the client raises a typed protocol error, the service records a
+    failure, and the page still renders.
+    """
+    client = session_events_client({"data": [{"turn_id": "x", "event": {"id": "e"}}]})
+    service = HarnessTraceService(client=client, bindings=await bound_store())
+
+    trace = await service.trace("run_1")
+
+    assert trace.trueforge_status == "unavailable"
+    assert trace.entries == ()
+    # BRANCHPOINT's own bindings survive an unreadable harness.
+    assert {b.trueforge_session_id for b in trace.bindings} == {"sess_planner", "sess_alpha"}

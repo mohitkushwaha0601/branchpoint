@@ -15,6 +15,7 @@ import asyncio
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 
 from app.infrastructure.trueforge.errors import (
     TrueForgeAPIError,
@@ -39,6 +40,51 @@ DEFAULT_TURN_TIMEOUT_SECONDS = 600.0
 
 #: Bounded transport retry for transient failures. Never unbounded.
 DEFAULT_TRANSPORT_RETRIES = 2
+
+
+def _unwrap_session_event(session_id: str, index: int, record: Any) -> TurnEvent:
+    """Turn one ``{"turn_id": ..., "event": {...}}`` envelope into a typed event.
+
+    Every failure here is a *protocol* failure — TrueForge said something this
+    client cannot read — so each one is raised as a :class:`TrueForgeAPIError`,
+    the error this module already uses for a well-formed HTTP response with an
+    unreadable body. That matters beyond tidiness: ``HarnessTraceService``
+    catches ``TrueForgeError`` and degrades to ``unavailable``, while a raw
+    Pydantic ``ValidationError`` escapes it and becomes an HTTP 500 on a page
+    whose whole purpose is to keep working when the harness misbehaves.
+
+    Details name the session, the position, and the offending *field* only.
+    Neither the envelope nor the event is interpolated into the message: these
+    payloads carry model output, tool arguments, and tool results, and an error
+    string is not an exemption from the redaction rule.
+    """
+    if not isinstance(record, dict):
+        raise TrueForgeAPIError(
+            200,
+            f"session {session_id} event {index}: envelope was "
+            f"{type(record).__name__}, expected an object",
+        )
+    if "event" not in record:
+        raise TrueForgeAPIError(200, f"session {session_id} event {index}: envelope had no 'event'")
+
+    raw = record["event"]
+    if not isinstance(raw, dict):
+        raise TrueForgeAPIError(
+            200,
+            f"session {session_id} event {index}: 'event' was "
+            f"{type(raw).__name__}, expected an object",
+        )
+
+    try:
+        return TurnEvent.model_validate(raw)
+    except ValidationError as exc:
+        # Field locations and messages only. `errors()` also carries `input`,
+        # which is the event's own content — never put that in an error.
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+            for error in exc.errors()
+        )
+        raise TrueForgeAPIError(200, f"session {session_id} event {index}: {problems}") from exc
 
 
 class TrueForgeClient:
@@ -242,12 +288,38 @@ class TrueForgeClient:
         ``GET /api/v1/sessions/{session_id}/events``. Used for the harness
         trace, where a per-turn read would miss the second turn a commit
         operator produces when BRANCHPOINT resumes its paused approval.
+
+        **This endpoint wraps each event in an envelope**, unlike the per-turn
+        log: every element of ``data`` is ``{"turn_id": ..., "event": {...}}``,
+        and the TrueForge event is the inner ``event`` object. Validating the
+        envelope as a :class:`TurnEvent` fails on the missing ``type`` — which
+        is exactly what turned a live harness-trace read into an HTTP 500.
+
+        ``turn_id`` is deliberately dropped. Nothing consumes it: a trace entry
+        is identified by session and event id, so carrying it would widen the
+        model for no reader.
         """
         payload = await self._request("GET", f"/api/v1/sessions/{session_id}/events")
-        return tuple(TurnEvent.model_validate(item) for item in payload.get("data", []))
+        records = payload.get("data", [])
+        if not isinstance(records, list):
+            raise TrueForgeAPIError(
+                200,
+                f"session {session_id} events: 'data' was "
+                f"{type(records).__name__}, expected a list",
+            )
+        return tuple(
+            _unwrap_session_event(session_id, index, record) for index, record in enumerate(records)
+        )
 
     async def list_turn_events(self, session_id: str, turn_id: str) -> tuple[TurnEvent, ...]:
-        """Fetch the event log for one turn."""
+        """Fetch the event log for one turn.
+
+        Deliberately **not** routed through the session-envelope parser. This is
+        a different endpoint with a different shape: its ``data`` elements are
+        bare events, and nothing observed says otherwise. Two endpoints, two
+        wire shapes, two parsers — collapsing them on the assumption that they
+        agree is how the session envelope went unnoticed in the first place.
+        """
         payload = await self._request(
             "GET", f"/api/v1/sessions/{session_id}/turns/{turn_id}/events"
         )
