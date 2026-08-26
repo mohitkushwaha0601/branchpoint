@@ -13,6 +13,8 @@ import type {
   RunDto,
   RunListDto,
   StartRunRequest,
+  WorldCounterexamplesDto,
+  WorldEvidenceDto,
   WorldInspectionDto,
   WorldsDto,
 } from "./types";
@@ -91,6 +93,36 @@ export function approveRun(
   return request<ApprovalDecisionDto>(
     `/api/v1/runs/${encodeURIComponent(runId)}/approval`,
     { method: "POST", body, signal },
+  );
+}
+
+/**
+ * A world's evidence alone.
+ *
+ * The Inspector uses {@link getWorldInspection}, which already carries these —
+ * one call for the whole chain. This is the narrower fetch for a client that
+ * wants only evidence.
+ */
+export function getWorldEvidence(
+  runId: string,
+  worldId: string,
+  signal?: AbortSignal,
+): Promise<WorldEvidenceDto> {
+  return request<WorldEvidenceDto>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/worlds/${encodeURIComponent(worldId)}/evidence`,
+    { signal },
+  );
+}
+
+/** A world's counterexamples alone, with the same authority the full route reports. */
+export function getWorldCounterexamples(
+  runId: string,
+  worldId: string,
+  signal?: AbortSignal,
+): Promise<WorldCounterexamplesDto> {
+  return request<WorldCounterexamplesDto>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/worlds/${encodeURIComponent(worldId)}/counterexamples`,
+    { signal },
   );
 }
 

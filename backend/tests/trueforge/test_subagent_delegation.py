@@ -7,6 +7,7 @@ grants nothing — not a tool, not a capability, and above all not the ability t
 veto a world.
 """
 
+import inspect
 import json
 
 import pytest
@@ -20,8 +21,11 @@ from app.infrastructure.trueforge.adversary import (
     DOPPELGANGER_TOOLS,
     SANDBOX_EVIDENCE_SOURCE,
 )
+from app.infrastructure.trueforge.commit_operator import TrueForgeCommitOperator
 from app.infrastructure.trueforge.models import SUBAGENT_TOOL_NAME
+from app.infrastructure.trueforge.planner import PLANNER_TOOLS, TrueForgeCandidatePlanner
 from app.infrastructure.trueforge.prompts import doppelganger_instructions
+from app.infrastructure.trueforge.sessions import InMemorySessionBindingStore
 from app.mcp.server import DESTRUCTIVE_TOOL_NAMES
 from tests.trueforge.fake_transport import FakeTrueForge, FakeTurn
 from tests.trueforge.test_adversary import (
@@ -216,3 +220,31 @@ async def test_mounting_a_skill_grants_no_extra_capability() -> None:
 
     assert with_skill["mcp_servers"] == without["mcp_servers"]
     assert with_skill["config"] == without["config"]
+
+
+async def test_no_other_role_can_be_given_a_skill() -> None:
+    """The skill setting reaches the adversary's spec builder and nowhere else.
+
+    TrueForge materialises a skill inside the sandbox, and the planner and the
+    commit operator both run with the sandbox off — so a skill on either of them
+    would be a resource TrueForge could not place, on the two roles that read
+    and write reality. Neither builder accepts a skill name at all, and this
+    pins that shut.
+    """
+    planner = TrueForgeCandidatePlanner(
+        FakeTrueForge([]).client(),
+        model="fake/model",
+        bindings=InMemorySessionBindingStore(),
+        read_only_tools=PLANNER_TOOLS,
+    )
+    operator = TrueForgeCommitOperator(
+        FakeTrueForge([]).client(),
+        model="fake/model",
+        bindings=InMemorySessionBindingStore(),
+    )
+
+    assert "skills" not in planner.agent_spec()
+    assert "skills" not in operator.agent_spec()
+    # Neither builder even has somewhere to put one.
+    for builder in (TrueForgeCandidatePlanner, TrueForgeCommitOperator):
+        assert "skill_name" not in inspect.signature(builder.__init__).parameters

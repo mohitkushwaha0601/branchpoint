@@ -12,6 +12,7 @@
 import { vi } from "vitest";
 
 import type {
+  ActionDetailDto,
   ComparisonDetailDto,
   CounterexampleDto,
   EvidenceDto,
@@ -432,12 +433,32 @@ export function mockServer(initial: RouteTable = {}): MockServer {
       }
       // Must precede the /runs/ catch-all, which would otherwise answer with
       // the run itself and hand the Inspector a payload of the wrong shape.
-      const worldDetail = /\/api\/v1\/runs\/[^/]+\/worlds\/([^/]+)$/.exec(path);
+      const worldDetail =
+        /\/api\/v1\/runs\/[^/]+\/worlds\/([^/]+?)(\/evidence|\/counterexamples)?$/.exec(
+          path,
+        );
       if (worldDetail !== null) {
         const inspection = routes.inspection?.[worldDetail[1]!];
-        return inspection === undefined
-          ? json({ detail: `world ${worldDetail[1]} not found` }, 404)
-          : json(inspection);
+        if (inspection === undefined) {
+          return json({ detail: `world ${worldDetail[1]} not found` }, 404);
+        }
+        // Sub-resources serve the same records as the full detail, exactly as
+        // the backend does — a narrower fetch must not disagree.
+        if (worldDetail[2] === "/evidence") {
+          return json({
+            run_id: RUN_ID,
+            world_id: worldDetail[1],
+            evidence: inspection.evidence,
+          });
+        }
+        if (worldDetail[2] === "/counterexamples") {
+          return json({
+            run_id: RUN_ID,
+            world_id: worldDetail[1],
+            counterexamples: inspection.counterexamples,
+          });
+        }
+        return json(inspection);
       }
       if (path.endsWith("/harness-trace")) {
         return routes.harness === undefined
@@ -613,7 +634,54 @@ function inspectionFor(
   counterexamples: CounterexampleDto[],
 ): WorldInspectionDto {
   const world = worldsDto().worlds.find((item) => item.world_id === worldId)!;
-  return { run_id: RUN_ID, world, evidence, counterexamples };
+  return {
+    run_id: RUN_ID,
+    world,
+    action: actionDetailDto(world.action_id, world.action_name, world.action_type),
+    outcome: {
+      succeeded: true,
+      goal_achieved: world.goal_achieved ?? false,
+      goal_attainment: world.goal_attainment ?? 0,
+      invariants_preserved: true,
+      reversible: true,
+      regressions_detected: world.regressions_detected ?? 0,
+      blast_radius: world.blast_radius ?? 0,
+      cost_delta: world.cost_delta ?? 0,
+      summary: "checkout_error_rate 0.413 -> 0.021",
+    },
+    evidence,
+    counterexamples,
+  };
+}
+
+/** The action shape the world detail route returns. */
+function actionDetailDto(
+  actionId: string,
+  name: string,
+  actionType: string,
+): ActionDetailDto {
+  const parameters: Record<string, string> =
+    actionType === "SET_DEPLOYMENT_VERSION"
+      ? { version: "v2.40" }
+      : actionType === "SET_FEATURE_FLAG"
+        ? { flag_key: "PRICING_V2" }
+        : { target_replicas: "12" };
+  return {
+    action_id: actionId,
+    name,
+    description: `${name} in production`,
+    action_type: actionType,
+    target_service: "pricing-service",
+    target_component: null,
+    target_environment: "production",
+    parameters,
+    expected_outcome: "Checkout error rate returns below threshold",
+    risk_class: "HIGH",
+    reversible: true,
+    action_fingerprint: "e91c4d2a7b30f558",
+    source_kind: "PLANNER",
+    source_name: "hero-demo-planner",
+  };
 }
 
 function evidenceDto(

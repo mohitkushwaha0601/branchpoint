@@ -100,9 +100,15 @@ class Settings(BaseSettings):
 
     It is opt-in because a skill is registered with TrueForge *out of band*
     (``PUT /api/v1/settings/skills`` with a git manifest) and referenced here by
-    name. Naming a skill TrueForge has not been given would fail at session
-    creation, which is the one place a failure is least affordable. Register the
-    skill first, confirm it, then set this.
+    name. Naming a skill TrueForge has not been given makes the turn
+    unprocessable, which is the one place a failure is least affordable.
+    Register the skill first, confirm it, then set this.
+
+    A mounted skill also needs a sandbox: TrueForge materialises skills in the
+    sandbox working directory, so set this only alongside
+    ``BRANCHPOINT_TRUEFORGE_SANDBOX_ENABLED``. Nothing enforces the pairing here
+    — a guard would be this codebase asserting third-party behaviour it cannot
+    verify offline — so it is documented rather than checked.
 
     See ``trueforge/skills/incident-counterfactual-review/SKILL.md``.
     """

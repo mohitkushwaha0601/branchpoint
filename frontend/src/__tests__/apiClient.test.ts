@@ -9,6 +9,8 @@ import { getDemoState } from "../api/demo";
 import {
   approveRun,
   getRun,
+  getWorldCounterexamples,
+  getWorldEvidence,
   getRunComparison,
   getRunEvents,
   getRunWorlds,
@@ -21,6 +23,7 @@ import {
   comparisonDto,
   demoStateDto,
   eventsDto,
+  fullChainInspection,
   mockServer,
   runDto,
   worldsDto,
@@ -174,5 +177,36 @@ describe("credentials", () => {
     const init = calls[0]!;
     expect(init.credentials).toBeUndefined();
     expect(init.headers).toBeUndefined();
+  });
+});
+
+describe("world sub-resources", () => {
+  it("reads a world's evidence and counterexamples on their own", async () => {
+    const inspection = fullChainInspection();
+    const server = mockServer({
+      run: runDto(),
+      inspection: { world_alpha: inspection },
+    });
+
+    const evidence = await getWorldEvidence(RUN_ID, "world_alpha");
+    const counterexamples = await getWorldCounterexamples(RUN_ID, "world_alpha");
+
+    expect(evidence.evidence).toEqual(inspection.evidence);
+    expect(counterexamples.counterexamples).toEqual(inspection.counterexamples);
+    expect(server.calls).toContain(
+      `GET /api/v1/runs/${RUN_ID}/worlds/world_alpha/evidence`,
+    );
+  });
+
+  it("reports an unknown world as a typed not-found", async () => {
+    const server = mockServer({ run: runDto() });
+    server.fail("/worlds/world_x", 404, "world world_x not found in run run_x");
+
+    const error = (await getWorldEvidence(RUN_ID, "world_x").catch(
+      (caught: unknown) => caught,
+    )) as ApiError;
+
+    expect(error.isNotFound).toBe(true);
+    expect(error.detail).toContain("world_x");
   });
 });

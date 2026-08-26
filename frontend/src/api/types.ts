@@ -199,11 +199,60 @@ export interface CounterexampleDto {
   supporting_evidence_ids: string[];
 }
 
+/** The exact action a world rehearsed, as the domain stores it. */
+export interface ActionDetailDto {
+  action_id: string;
+  name: string;
+  description: string;
+  action_type: string;
+  target_service: string;
+  target_component: string | null;
+  target_environment: string;
+  /** What the action would change, e.g. `{ version: "v2.40" }`. */
+  parameters: Record<string, string | number | boolean | null>;
+  expected_outcome: string;
+  risk_class: string;
+  reversible: boolean;
+  action_fingerprint: string;
+  source_kind: string;
+  source_name: string;
+}
+
+/** What executing the action in this world measured. */
+export interface OutcomeDetailDto {
+  succeeded: boolean;
+  goal_achieved: boolean;
+  goal_attainment: number;
+  invariants_preserved: boolean;
+  reversible: boolean;
+  regressions_detected: number;
+  blast_radius: number;
+  cost_delta: number;
+  summary: string;
+}
+
 /** Everything BRANCHPOINT recorded about one world. */
 export interface WorldInspectionDto {
   run_id: string;
   world: WorldDetailDto;
+  action: ActionDetailDto;
+  /** `null` until the world has executed — never a zeroed stand-in. */
+  outcome: OutcomeDetailDto | null;
   evidence: EvidenceDto[];
+  counterexamples: CounterexampleDto[];
+}
+
+/** A world's evidence alone, from the narrower sub-resource. */
+export interface WorldEvidenceDto {
+  run_id: string;
+  world_id: string;
+  evidence: EvidenceDto[];
+}
+
+/** A world's counterexamples alone. */
+export interface WorldCounterexamplesDto {
+  run_id: string;
+  world_id: string;
   counterexamples: CounterexampleDto[];
 }
 

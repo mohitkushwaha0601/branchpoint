@@ -35,12 +35,18 @@ from app.application.orchestration.approval import (
     CommitFailedError,
 )
 from app.core.config import ModelNotConfiguredError, Settings, get_settings
+from app.domain.actions.models import ActionType, CandidateAction, RiskClass
 from app.domain.comparison.models import ComparisonResult
 from app.domain.evidence.models import Evidence, EvidenceKind, EvidenceSeverity
 from app.domain.incidents.models import Incident, IncidentSeverity
 from app.domain.primitives import ScalarValue, new_id, utc_now
 from app.domain.runs.lifecycle import RunStatus
-from app.domain.worlds.models import Counterexample, CounterexampleStatus, World
+from app.domain.worlds.models import (
+    Counterexample,
+    CounterexampleStatus,
+    ExecutionOutcome,
+    World,
+)
 from app.domain.worlds.verdicts import (
     counterexample_vetoes,
     disqualifying_evidence,
@@ -380,6 +386,102 @@ class WorldDetailResponse(BaseModel):
         )
 
 
+class ActionDetailResponse(BaseModel):
+    """The exact action a world rehearsed, as the domain stores it.
+
+    Everything here is already on ``CandidateAction``; the world list only ever
+    carried its id, name, and type, which is why a client could not say *what*
+    an action would change. The fingerprint is the same content hash an approval
+    binds to — safe to show, and not a capability.
+    """
+
+    action_id: str
+    name: str
+    description: str
+    action_type: ActionType
+    target_service: str
+    target_component: str | None
+    target_environment: str
+    #: The one parameter this action family changes, e.g. ``{"version": "v2.40"}``.
+    parameters: dict[str, ScalarValue]
+    expected_outcome: str
+    risk_class: RiskClass
+    reversible: bool
+    action_fingerprint: str
+    source_kind: str
+    source_name: str
+
+    @classmethod
+    def from_domain(cls, action: CandidateAction) -> "ActionDetailResponse":
+        """Build the response from a domain candidate action."""
+        return cls(
+            action_id=action.action_id,
+            name=action.name,
+            description=action.description,
+            action_type=action.action_type,
+            target_service=action.target.service,
+            target_component=action.target.component,
+            target_environment=action.target.environment,
+            parameters=dict(action.parameters),
+            expected_outcome=action.expected_outcome,
+            risk_class=action.risk_class,
+            reversible=action.reversible,
+            action_fingerprint=action.fingerprint(),
+            source_kind=str(action.source.kind),
+            source_name=action.source.name,
+        )
+
+
+class OutcomeDetailResponse(BaseModel):
+    """What executing the action in this world actually measured.
+
+    Every field is a stored value from ``ExecutionOutcome``. Nothing is derived,
+    and a world that has not executed yet has no outcome at all rather than a
+    zeroed one.
+    """
+
+    succeeded: bool
+    goal_achieved: bool
+    goal_attainment: float
+    invariants_preserved: bool
+    reversible: bool
+    regressions_detected: int
+    blast_radius: int
+    cost_delta: float
+    summary: str
+
+    @classmethod
+    def from_domain(cls, outcome: ExecutionOutcome) -> "OutcomeDetailResponse":
+        """Build the response from a domain execution outcome."""
+        return cls(
+            succeeded=outcome.succeeded,
+            goal_achieved=outcome.goal_achieved,
+            goal_attainment=outcome.goal_attainment,
+            invariants_preserved=outcome.invariants_preserved,
+            reversible=outcome.reversible,
+            regressions_detected=outcome.regressions_detected,
+            blast_radius=outcome.blast_radius,
+            cost_delta=outcome.cost_delta,
+            summary=outcome.summary,
+        )
+
+
+class WorldEvidenceResponse(BaseModel):
+    """A world's evidence on its own, for a client that wants only that."""
+
+    run_id: str
+    world_id: str
+    evidence: tuple[EvidenceResponse, ...]
+
+
+class WorldCounterexamplesResponse(BaseModel):
+    """A world's counterexamples on their own."""
+
+    run_id: str
+    world_id: str
+    counterexamples: tuple[CounterexampleResponse, ...]
+
+
 class WorldInspectionResponse(BaseModel):
     """Everything BRANCHPOINT recorded about one world.
 
@@ -392,6 +494,9 @@ class WorldInspectionResponse(BaseModel):
 
     run_id: str
     world: WorldDetailResponse
+    action: ActionDetailResponse
+    #: ``None`` until the world has executed. Never a zeroed stand-in.
+    outcome: OutcomeDetailResponse | None
     #: Domain order, which is arrival order: execution evidence, then attack
     #: evidence, then replay evidence.
     evidence: tuple[EvidenceResponse, ...]
@@ -404,6 +509,10 @@ class WorldInspectionResponse(BaseModel):
         return cls(
             run_id=run_id,
             world=WorldDetailResponse.from_domain(world),
+            action=ActionDetailResponse.from_domain(world.candidate_action),
+            outcome=(
+                None if world.outcome is None else OutcomeDetailResponse.from_domain(world.outcome)
+            ),
             evidence=tuple(EvidenceResponse.from_domain(item) for item in world.evidence),
             counterexamples=tuple(
                 CounterexampleResponse.from_domain(counterexample, index)
@@ -656,15 +765,8 @@ async def reject_run(run_id: str, body: RejectRunRequest) -> HumanDecisionRespon
     )
 
 
-@router.get("/runs/{run_id}/worlds/{world_id}", response_model=WorldInspectionResponse)
-async def get_run_world(
-    run_id: str, world_id: str, repository: RunRepositoryDep
-) -> WorldInspectionResponse:
-    """Return one world with its evidence, counterexamples, and veto linkage.
-
-    Read-only. Everything it reports is already stored on the world; this route
-    stops hiding it behind counts.
-    """
+async def _require_world(repository: RunRepositoryDep, run_id: str, world_id: str) -> World:
+    """Resolve one world, or answer 404 for whichever half is missing."""
     run = await repository.get(run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"run {run_id} not found")
@@ -674,7 +776,65 @@ async def get_run_world(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"world {world_id} not found in run {run_id}",
         )
-    return WorldInspectionResponse.from_domain(run_id, world)
+    return world
+
+
+@router.get("/runs/{run_id}/worlds/{world_id}", response_model=WorldInspectionResponse)
+async def get_run_world(
+    run_id: str, world_id: str, repository: RunRepositoryDep
+) -> WorldInspectionResponse:
+    """Return one world with its action, outcome, evidence, and veto linkage.
+
+    Read-only. Everything it reports is already stored on the world; this route
+    stops hiding it behind counts. One call is enough for the whole proof chain,
+    which is why the Inspector makes exactly one.
+    """
+    return WorldInspectionResponse.from_domain(
+        run_id, await _require_world(repository, run_id, world_id)
+    )
+
+
+@router.get("/runs/{run_id}/worlds/{world_id}/evidence", response_model=WorldEvidenceResponse)
+async def get_world_evidence(
+    run_id: str, world_id: str, repository: RunRepositoryDep
+) -> WorldEvidenceResponse:
+    """A world's evidence alone.
+
+    The same records the inspection response carries, built by the same
+    serializer — a narrower fetch for a client that wants only evidence, never a
+    second opinion about it.
+    """
+    world = await _require_world(repository, run_id, world_id)
+    return WorldEvidenceResponse(
+        run_id=run_id,
+        world_id=world.world_id,
+        evidence=tuple(EvidenceResponse.from_domain(item) for item in world.evidence),
+    )
+
+
+@router.get(
+    "/runs/{run_id}/worlds/{world_id}/counterexamples",
+    response_model=WorldCounterexamplesResponse,
+)
+async def get_world_counterexamples(
+    run_id: str, world_id: str, repository: RunRepositoryDep
+) -> WorldCounterexamplesResponse:
+    """A world's counterexamples alone.
+
+    ``authoritative`` is still decided by the domain's own ``counterexample_vetoes``
+    against this world's evidence index, so the narrower route cannot disagree
+    with the full one about what an attack proved.
+    """
+    world = await _require_world(repository, run_id, world_id)
+    index = world.evidence_by_id
+    return WorldCounterexamplesResponse(
+        run_id=run_id,
+        world_id=world.world_id,
+        counterexamples=tuple(
+            CounterexampleResponse.from_domain(counterexample, index)
+            for counterexample in world.counterexamples
+        ),
+    )
 
 
 @router.get("/runs/{run_id}/comparison", response_model=ComparisonDetailResponse)

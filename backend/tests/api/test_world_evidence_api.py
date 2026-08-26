@@ -20,12 +20,13 @@ from app.api.dependencies import get_event_sink, get_run_repository
 from app.domain.evidence.models import EvidenceKind, EvidenceSeverity
 from app.domain.runs.lifecycle import RunStatus
 from app.domain.runs.models import BranchpointRun
-from app.domain.worlds.models import CounterexampleStatus
+from app.domain.worlds.models import CounterexampleStatus, World
 from app.infrastructure.persistence.memory import InMemoryEventSink, InMemoryRunRepository
 from app.main import app
 from tests.factories import (
     FIXED_TIME,
     completed_world,
+    make_action,
     make_counterexample,
     make_evidence,
     make_incident,
@@ -435,3 +436,149 @@ async def test_the_world_list_keeps_the_fields_it_already_had(client) -> None:
     ):
         assert field in world, field
     assert world["verdict_reason"], "the human-readable summary is still there"
+
+
+# ----- action and outcome detail ----------------------------------------------
+#
+# The list endpoint only ever carried an action's id, name, and type, so a client
+# could not say what the action would actually change. These pin the stored
+# values through, and pin the absent ones absent.
+
+
+async def test_the_action_is_serialized_from_stored_domain_values(client) -> None:
+    http, repository = client
+    await store_world(repository, evidence=(failing_replay_evidence(),))
+
+    action = (await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_1")).json()["action"]
+
+    assert action["action_id"] == "action_1"
+    assert action["name"] == "Disable pricing v2 flag"
+    assert action["action_type"] == "FEATURE_FLAG_DISABLE"
+    assert action["target_service"] == "pricing-service"
+    assert action["target_environment"] == "production"
+    assert action["reversible"] is True
+    assert action["risk_class"] == "LOW"
+    assert action["source_kind"] == "PLANNER"
+    # A content hash of the action, the same one an approval binds to.
+    assert len(action["action_fingerprint"]) == 64
+
+
+async def test_action_parameters_are_passed_through_verbatim(client) -> None:
+    """The one field that says what would change. Never reconstructed."""
+    http, repository = client
+    world = completed_world(
+        world_id="world_1",
+        run_id=RUN_ID,
+        action=make_action("action_1", parameters={"version": "v2.40"}),
+        attack_evidence=(failing_replay_evidence(),),
+    )
+    run = BranchpointRun.create(run_id=RUN_ID, incident=make_incident(), at=FIXED_TIME)
+    await repository.save(run.transition_to(RunStatus.OBSERVING).with_worlds((world,)))
+
+    action = (await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_1")).json()["action"]
+
+    assert action["parameters"] == {"version": "v2.40"}
+
+
+async def test_the_outcome_is_serialized_from_stored_measurements(client) -> None:
+    http, repository = client
+    await store_world(repository, evidence=(failing_replay_evidence(),))
+
+    outcome = (await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_1")).json()["outcome"]
+
+    assert outcome["succeeded"] is True
+    assert outcome["goal_achieved"] is True
+    assert outcome["goal_attainment"] == 1.0
+    assert outcome["invariants_preserved"] is True
+    assert outcome["blast_radius"] == 1
+    assert outcome["cost_delta"] == 0.0
+    assert outcome["summary"] == "counterfactual execution completed"
+
+
+async def test_a_world_that_has_not_executed_has_no_outcome(client) -> None:
+    """Null, not a zeroed stand-in that would read as "measured, all zero"."""
+    http, repository = client
+    world = World.create(
+        world_id="world_1", run_id=RUN_ID, candidate_action=make_action(), at=FIXED_TIME
+    )
+    run = BranchpointRun.create(run_id=RUN_ID, incident=make_incident(), at=FIXED_TIME)
+    await repository.save(run.transition_to(RunStatus.OBSERVING).with_worlds((world,)))
+
+    body = (await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_1")).json()
+
+    assert body["outcome"] is None
+    assert body["action"]["action_id"] == "action_1"
+
+
+async def test_no_capability_or_credential_material_is_serialized(client) -> None:
+    http, repository = client
+    await store_world(
+        repository,
+        evidence=(sandbox_evidence(), failing_replay_evidence()),
+        counterexamples=(
+            make_counterexample(
+                "attack_1",
+                "world_1",
+                status=CounterexampleStatus.REPRODUCED,
+                evidence_ids=("evidence_replay",),
+            ),
+        ),
+    )
+
+    raw = (await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_1")).text.lower()
+
+    for forbidden in ("capability", "cap_", "token", "secret", "api_key", "authorization"):
+        assert forbidden not in raw, forbidden
+
+
+# ----- the narrower sub-resources ---------------------------------------------
+
+
+async def test_the_evidence_route_returns_the_same_records(client) -> None:
+    http, repository = client
+    await store_world(repository, evidence=(sandbox_evidence(), failing_replay_evidence()))
+
+    full = (await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_1")).json()
+    only = (await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_1/evidence")).json()
+
+    assert only["world_id"] == "world_1"
+    assert only["evidence"] == full["evidence"], "the narrower route must not disagree"
+
+
+async def test_the_counterexample_route_agrees_about_authority(client) -> None:
+    """A narrower fetch must not reach a different conclusion about an attack."""
+    http, repository = client
+    await store_world(
+        repository,
+        evidence=(sandbox_evidence(),),
+        counterexamples=(
+            make_counterexample(
+                "attack_1",
+                "world_1",
+                status=CounterexampleStatus.REPRODUCED,
+                evidence_ids=("evidence_sandbox",),
+            ),
+        ),
+    )
+
+    full = (await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_1")).json()
+    only = (await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_1/counterexamples")).json()
+
+    assert only["counterexamples"] == full["counterexamples"]
+    # Claimed reproduced, unsupported, therefore not authoritative — on both routes.
+    assert only["counterexamples"][0]["reproduced"] is True
+    assert only["counterexamples"][0]["authoritative"] is False
+
+
+@pytest.mark.parametrize("suffix", ["", "/evidence", "/counterexamples"])
+async def test_every_world_route_404s_the_same_way(client, suffix: str) -> None:
+    http, repository = client
+    await store_world(repository)
+
+    unknown_run = await http.get(f"/api/v1/runs/run_missing/worlds/world_1{suffix}")
+    unknown_world = await http.get(f"/api/v1/runs/{RUN_ID}/worlds/world_missing{suffix}")
+
+    assert unknown_run.status_code == 404
+    assert unknown_run.json()["detail"] == "run run_missing not found"
+    assert unknown_world.status_code == 404
+    assert "world_missing" in unknown_world.json()["detail"]

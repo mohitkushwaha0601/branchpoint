@@ -377,3 +377,65 @@ describe("replay linkage", () => {
     expect(verified.detail).toBe("payment_retry failed");
   });
 });
+
+// ----- the action a world actually rehearsed ----------------------------------
+//
+// The list endpoint only carried an id, a name, and a type, so the Inspector
+// used to say parameter values were "not exposed". They are now, and these pin
+// that the rendered values come from the backend rather than from a fixture.
+
+describe("action detail", () => {
+  it("renders the stored target and parameters", async () => {
+    serveRun({ world_alpha: fullChainInspection() });
+    await selectAlpha();
+
+    const panel = within(inspector());
+    await waitFor(() =>
+      expect(panel.getByText("pricing-service")).toBeInTheDocument(),
+    );
+    // The stored parameter, key and value, exactly as the backend sent it.
+    expect(panel.getByText("version")).toBeInTheDocument();
+    expect(panel.getByText("v2.40")).toBeInTheDocument();
+    // ...and it no longer claims the data is missing.
+    expect(
+      panel.queryByText(/not exposed per world by the current API/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the stored risk, reversibility, and fingerprint", async () => {
+    serveRun({ world_alpha: fullChainInspection() });
+    await selectAlpha();
+
+    const panel = within(inspector());
+    await waitFor(() => expect(panel.getByText("HIGH")).toBeInTheDocument());
+    expect(panel.getByText("SET_DEPLOYMENT_VERSION")).toBeInTheDocument();
+    expect(panel.getByText("e91c4d2a7b30f558")).toBeInTheDocument();
+  });
+
+  it("renders the measured outcome, not a reconstructed one", async () => {
+    serveRun({ world_alpha: fullChainInspection() });
+    await selectAlpha();
+
+    const panel = within(inspector());
+    await waitFor(() =>
+      expect(
+        panel.getByText("checkout_error_rate 0.413 -> 0.021"),
+      ).toBeInTheDocument(),
+    );
+    expect(panel.getByText("Goal attainment")).toBeInTheDocument();
+    expect(panel.getByText("94%")).toBeInTheDocument();
+  });
+
+  it("says a world has not executed rather than showing zeros", async () => {
+    const inspection = fullChainInspection();
+    serveRun({ world_alpha: { ...inspection, outcome: null } });
+    await selectAlpha();
+
+    const panel = within(inspector());
+    await waitFor(() =>
+      expect(
+        panel.getByText(/has not executed yet, so nothing has been measured/),
+      ).toBeInTheDocument(),
+    );
+  });
+});

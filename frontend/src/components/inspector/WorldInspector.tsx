@@ -15,11 +15,6 @@ import type { WorldInspectionState } from "../../hooks/useWorldInspection";
 import { EvidenceInspector } from "./EvidenceInspector";
 import { ProofChain, SupportingEvidence } from "./ProofChain";
 
-/** Empty means the API did not carry the value, and says so on screen. */
-function dash(value: string): string {
-  return value === "" ? "—" : value;
-}
-
 function Section({
   heading,
   children,
@@ -34,29 +29,6 @@ function Section({
       </h4>
       {children}
     </section>
-  );
-}
-
-function Transition({
-  label,
-  from,
-  to,
-}: {
-  label: string;
-  from: string;
-  to: string;
-}) {
-  return (
-    <div className="py-1">
-      <p className="text-[11px] text-fg-dim">{label}</p>
-      <p className="font-mono text-[12px] tabular-nums">
-        <span className="text-fg-faint">{from}</span>
-        <span className="px-1.5 text-fg-faint" aria-label="changes to">
-          →
-        </span>
-        <span className="text-fg">{to}</span>
-      </p>
-    </div>
   );
 }
 
@@ -143,79 +115,122 @@ export function WorldInspector({
       ) : null}
 
       <Section heading="ACTION">
-        <p className="text-[12px] text-fg">{world.action.name}</p>
-        {world.action.parameter ? (
-          <Transition
-            label={world.action.parameter}
-            from={world.action.from}
-            to={world.action.to}
-          />
+        {detail === null ? (
+          /* No fetched detail: the offline fixture route, or a failed fetch.
+             The view model's own action is shown when it has one — a fixture
+             carries real values — and a live world's is empty, which renders as
+             nothing rather than as an invented transition. */
+          <>
+            <p className="font-mono text-[12px] text-fg">
+              {world.action.parameter || world.action.target || world.action.name}
+            </p>
+            {world.action.from && world.action.to ? (
+              <p className="mt-0.5 font-mono text-[12px] tabular-nums">
+                <span className="text-fg-faint">{world.action.from}</span>
+                <span className="px-1.5 text-fg-faint" aria-label="changes to">
+                  →
+                </span>
+                <span className="text-fg">{world.action.to}</span>
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] leading-relaxed text-fg-faint">
+                Action detail loads with the world&rsquo;s evidence.
+              </p>
+            )}
+          </>
         ) : (
-          <p className="mt-1 text-[11px] leading-relaxed text-fg-faint">
-            Parameter values are not exposed per world by the current API.
-          </p>
+          <>
+            <p className="font-mono text-[12px] text-fg">
+              {detail.action.target_service}
+            </p>
+            <p className="mt-0.5 text-[12px] text-fg-dim">{detail.action.name}</p>
+            {/* What the action would actually change, verbatim from the stored
+                CandidateAction. Not a before/after: the backend records the
+                target value, and inventing the "from" side would be fiction. */}
+            <dl className="mt-2 space-y-0.5">
+              {Object.entries(detail.action.parameters).map(([key, value]) => (
+                <div key={key} className="flex items-baseline justify-between gap-3">
+                  <dt className="font-mono text-[11px] text-fg-faint">{key}</dt>
+                  <dd className="font-mono text-[11px] text-fg">{String(value)}</dd>
+                </div>
+              ))}
+              {Object.keys(detail.action.parameters).length === 0 ? (
+                <p className="text-[11px] text-fg-faint">
+                  This action family takes no parameters.
+                </p>
+              ) : null}
+            </dl>
+            <dl className="mt-2 space-y-0.5 border-t border-edge-muted pt-1.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-[11px] text-fg-faint">Type</dt>
+                <dd className="font-mono text-[11px] text-fg-dim">
+                  {detail.action.action_type}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-[11px] text-fg-faint">Risk</dt>
+                <dd className="font-mono text-[11px] text-fg-dim">
+                  {detail.action.risk_class}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-[11px] text-fg-faint">Reversible</dt>
+                <dd className="font-mono text-[11px] text-fg-dim">
+                  {detail.action.reversible ? "yes" : "no"}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-[11px] text-fg-faint">Fingerprint</dt>
+                <dd className="truncate font-mono text-[11px] text-fg-dim">
+                  {detail.action.action_fingerprint.slice(0, 16)}
+                </dd>
+              </div>
+            </dl>
+          </>
         )}
-        <dl className="mt-2 space-y-0.5">
-          <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-fg-faint">Action id</dt>
-            <dd className="font-mono text-[11px] text-fg-dim">
-              {dash(world.action.actionId)}
-            </dd>
-          </div>
-          <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-fg-faint">Fingerprint</dt>
-            <dd className="font-mono text-[11px] text-fg-dim">
-              {dash(world.action.fingerprint)}
-            </dd>
-          </div>
-          <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-fg-faint">Reversible</dt>
-            <dd className="font-mono text-[11px] text-fg-dim">
-              {world.action.reversible === null
-                ? "—"
-                : world.action.reversible
-                  ? "yes"
-                  : "no"}
-            </dd>
-          </div>
-        </dl>
       </Section>
 
       <Section heading="RESULT">
-        {world.outcome.results.length > 0 ? (
-          world.outcome.results.map((result) => (
-            <Transition
-              key={result.label}
-              label={result.label}
-              from={result.from ?? "—"}
-              to={result.to ?? result.value}
-            />
-          ))
+        {detail?.outcome != null ? (
+          <>
+            {/* The engine's own one-line measurement, which is where a real
+                before/after lives when there is one. */}
+            <p className="font-mono text-[11px] leading-snug text-fg-dim">
+              {detail.outcome.summary}
+            </p>
+            <dl className="mt-1.5 space-y-0.5 border-t border-edge-muted pt-1.5">
+              {(
+                [
+                  ["Goal achieved", detail.outcome.goal_achieved ? "yes" : "no"],
+                  [
+                    "Goal attainment",
+                    `${(detail.outcome.goal_attainment * 100).toFixed(0)}%`,
+                  ],
+                  [
+                    "Invariants preserved",
+                    detail.outcome.invariants_preserved ? "yes" : "no",
+                  ],
+                  ["Regressions", String(detail.outcome.regressions_detected)],
+                  ["Blast radius", String(detail.outcome.blast_radius)],
+                  ["Cost delta", `$${detail.outcome.cost_delta.toLocaleString()}`],
+                ] as const
+              ).map(([label, value]) => (
+                <div key={label} className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[11px] text-fg-faint">{label}</dt>
+                  <dd className="font-mono text-[11px] text-fg-dim">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </>
+        ) : detail !== null ? (
+          <p className="text-[11px] leading-relaxed text-fg-faint">
+            This world has not executed yet, so nothing has been measured.
+          </p>
         ) : (
           <p className="text-[11px] leading-relaxed text-fg-faint">
-            Per-world before/after metrics are not exposed by the current API.
+            Measurements load with the world&rsquo;s evidence.
           </p>
         )}
-        <dl className="mt-1.5 space-y-0.5 border-t border-edge-muted pt-1.5">
-          <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-fg-faint">Goal achieved</dt>
-            <dd className="font-mono text-[11px] text-fg-dim">
-              {world.outcome.goalAchieved ? "yes" : "no"}
-            </dd>
-          </div>
-          <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-fg-faint">Blast radius</dt>
-            <dd className="font-mono text-[11px] text-fg-dim">
-              {world.outcome.blastRadius}
-            </dd>
-          </div>
-          <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-fg-faint">Cost delta</dt>
-            <dd className="font-mono text-[11px] text-fg-dim">
-              ${world.outcome.costDelta.toLocaleString()}
-            </dd>
-          </div>
-        </dl>
       </Section>
 
       <Section heading="DOPPELGÄNGER">
