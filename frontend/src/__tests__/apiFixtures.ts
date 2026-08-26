@@ -13,6 +13,7 @@ import { vi } from "vitest";
 
 import type {
   ComparisonDetailDto,
+  HarnessTraceDto,
   DemoStateDto,
   EventListDto,
   RunDto,
@@ -297,6 +298,7 @@ export function demoStateDto(flagEnabled = true): DemoStateDto {
 }
 
 export interface RouteTable {
+  harness?: HarnessTraceDto;
   run?: RunDto | (() => RunDto);
   worlds?: WorldsDto | null;
   comparison?: ComparisonDetailDto | null;
@@ -397,6 +399,11 @@ export function mockServer(initial: RouteTable = {}): MockServer {
         const run = routes.run === undefined ? null : resolve(routes.run);
         return json({ runs: run === null ? [] : [run] });
       }
+      if (path.endsWith("/harness-trace")) {
+        return routes.harness === undefined
+          ? json(emptyHarnessTrace())
+          : json(routes.harness);
+      }
       if (path.endsWith("/events")) {
         return routes.events === undefined
           ? json({ events: [] })
@@ -432,5 +439,123 @@ export function mockServer(initial: RouteTable = {}): MockServer {
     goOffline: () => {
       offline = true;
     },
+  };
+}
+
+/** A run whose harness has done nothing yet. The default for most tests. */
+export function emptyHarnessTrace(): HarnessTraceDto {
+  return {
+    run_id: RUN_ID,
+    trueforge_status: "available",
+    detail: "no TrueForge sessions bound to this run yet",
+    sessions: [],
+    entries: [],
+  };
+}
+
+/**
+ * A harness trace carrying one of every TrueForge capability, in the exact
+ * shape `GET /runs/{id}/harness-trace` returns — MCP calls, a Daytona sandbox,
+ * a successful exec, a real subagent thread, and the approval checkpoint.
+ */
+export function harnessTraceDto(): HarnessTraceDto {
+  const base = {
+    session_id: "sess_alpha",
+    purpose: "ADVERSARY",
+    world_id: "world_alpha",
+    tool_name: "",
+    mcp_server: "",
+    thread_id: "main",
+    sandbox_id: "",
+    exit_code: null,
+  };
+  return {
+    run_id: RUN_ID,
+    trueforge_status: "available",
+    detail: "read 2 TrueForge session(s)",
+    sessions: [
+      {
+        purpose: "PLANNER",
+        trueforge_session_id: "sess_planner",
+        world_id: null,
+        status: "COMPLETED",
+        last_turn_id: "turn_1",
+        created_at: "2026-08-26T18:42:01Z",
+        updated_at: "2026-08-26T18:42:09Z",
+      },
+      {
+        purpose: "ADVERSARY",
+        trueforge_session_id: "sess_alpha",
+        world_id: "world_alpha",
+        status: "COMPLETED",
+        last_turn_id: "turn_2",
+        created_at: "2026-08-26T18:42:10Z",
+        updated_at: "2026-08-26T18:42:19Z",
+      },
+    ],
+    entries: [
+      {
+        ...base,
+        trace_id: "t1",
+        timestamp: "2026-08-26T18:42:03Z",
+        category: "MCP_TOOL",
+        status: "OK",
+        summary: "MCP · branchpoint_get_metrics",
+        tool_name: "branchpoint_get_metrics",
+        mcp_server: "branchpoint",
+      },
+      {
+        ...base,
+        trace_id: "t2",
+        timestamp: "2026-08-26T18:42:05Z",
+        category: "SANDBOX_CREATED",
+        status: "OK",
+        summary: "Daytona sandbox created",
+        sandbox_id: "v1:daytona:4a19c72e",
+      },
+      {
+        ...base,
+        trace_id: "t3",
+        timestamp: "2026-08-26T18:42:08Z",
+        category: "SUBAGENT_CREATED",
+        status: "OK",
+        summary: "Subagent · Compatibility Skeptic",
+        thread_id: "thread_sub_1",
+      },
+      {
+        ...base,
+        trace_id: "t4",
+        timestamp: "2026-08-26T18:42:11Z",
+        category: "SANDBOX_EXEC",
+        status: "OK",
+        summary: "Sandbox exec completed",
+        tool_name: "exec",
+        thread_id: "thread_sub_1",
+        exit_code: 0,
+      },
+      {
+        ...base,
+        trace_id: "t5",
+        timestamp: "2026-08-26T18:44:15Z",
+        session_id: "sess_operator",
+        purpose: "COMMIT_OPERATOR",
+        world_id: "world_beta",
+        category: "APPROVAL_REQUIRED",
+        status: "PENDING",
+        summary: "Human approval required",
+        tool_name: "branchpoint_commit_recommended_world",
+      },
+    ],
+  };
+}
+
+/** TrueForge down: bindings survive, the timeline does not. */
+export function unreachableHarnessTrace(): HarnessTraceDto {
+  const trace = harnessTraceDto();
+  return {
+    ...trace,
+    trueforge_status: "unavailable",
+    detail: "could not read 2 of 2 session(s)",
+    entries: [],
   };
 }

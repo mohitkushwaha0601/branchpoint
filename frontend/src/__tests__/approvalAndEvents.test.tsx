@@ -63,21 +63,23 @@ describe("event drawer", () => {
 
     const toggle = screen.getByRole("button", { name: /SHOW/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("Incident snapshot captured")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
 
     await user.click(toggle);
     expect(
       screen.getByRole("button", { name: /HIDE/ }),
     ).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Incident snapshot captured")).toBeInTheDocument();
+    // Harness leads: it is the tab that answers "did TrueForge do this?".
+    expect(screen.getByRole("tabpanel", { name: "Harness" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /HIDE/ }));
-    expect(screen.queryByText("Incident snapshot captured")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
   });
 
   it("lists the run's events with monospace timestamps", async () => {
     const { user } = renderFixture();
     await user.click(screen.getByRole("button", { name: /SHOW/ }));
+    await user.click(screen.getByRole("tab", { name: "Events" }));
 
     const panel = screen.getByRole("tabpanel", { name: "Events" });
     expect(within(panel).getByText("18:42:01")).toBeInTheDocument();
@@ -90,6 +92,7 @@ describe("event drawer", () => {
   it("selects the related world when an event is activated", async () => {
     const { user } = renderFixture();
     await user.click(screen.getByRole("button", { name: /SHOW/ }));
+    await user.click(screen.getByRole("tab", { name: "Events" }));
 
     const panel = screen.getByRole("tabpanel", { name: "Events" });
     await user.click(
@@ -101,16 +104,32 @@ describe("event drawer", () => {
     ).toBeInTheDocument();
   });
 
-  it("switches streams and keeps the sandbox authority boundary explicit", async () => {
+  it("offers exactly the three streams a reviewer needs", async () => {
     const { user } = renderFixture();
+    await user.click(screen.getByRole("button", { name: /SHOW/ }));
 
-    await user.click(screen.getByRole("tab", { name: "Sandbox" }));
-    const panel = screen.getByRole("tabpanel", { name: "Sandbox" });
     expect(
-      within(panel).getByText(/EXPLORATORY and can never veto a world/),
+      screen.getAllByRole("tab").map((tab) => tab.textContent),
+    ).toEqual(["Harness", "Events", "Evidence"]);
+  });
+
+  it("keeps BRANCHPOINT's own timeline separate from the harness one", async () => {
+    const { user } = renderFixture();
+    await user.click(screen.getByRole("button", { name: /SHOW/ }));
+
+    // The fixture route has no backend, so it has no harness trace to show...
+    expect(
+      within(screen.getByRole("tabpanel", { name: "Harness" })).getByText(
+        /Loading TrueForge harness trace/,
+      ),
     ).toBeInTheDocument();
+
+    // ...while BRANCHPOINT's own events are the fixture's and render fine.
+    await user.click(screen.getByRole("tab", { name: "Events" }));
     expect(
-      within(panel).getByText(/only BRANCHPOINT/i),
+      within(screen.getByRole("tabpanel", { name: "Events" })).getByText(
+        "Incident snapshot captured",
+      ),
     ).toBeInTheDocument();
   });
 });

@@ -7,6 +7,7 @@ import type {
   ApprovalRequest,
   ComparisonDetailDto,
   EventListDto,
+  HarnessTraceDto,
   RunDto,
   RunListDto,
   StartRunRequest,
@@ -87,5 +88,22 @@ export function approveRun(
   return request<ApprovalDecisionDto>(
     `/api/v1/runs/${encodeURIComponent(runId)}/approval`,
     { method: "POST", body, signal },
+  );
+}
+
+/**
+ * TrueForge harness activity for one run.
+ *
+ * Read through BRANCHPOINT, always: TrueForge is private to the backend and its
+ * address never appears in this bundle. A run whose harness cannot be reached
+ * still answers 200, with `trueforge_status: "unavailable"`.
+ */
+export function getHarnessTrace(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<HarnessTraceDto> {
+  return request<HarnessTraceDto>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/harness-trace`,
+    { signal },
   );
 }

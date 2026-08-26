@@ -233,3 +233,57 @@ export interface ApprovalRequest {
   expected_action_id?: string;
   expected_action_fingerprint?: string;
 }
+
+// ----- TrueForge harness trace -----------------------------------------------
+//
+// A redacted, backend-normalized view of what the TrueForge harness actually
+// did. It is provenance about the agent runtime, never evidence: nothing here
+// can reproduce a counterexample or veto a world.
+
+export type HarnessCategoryDto =
+  | "SESSION"
+  | "MCP_TOOL"
+  | "SANDBOX_CREATED"
+  | "SANDBOX_EXEC"
+  | "SUBAGENT_CREATED"
+  | "SUBAGENT_COMPLETED"
+  | "APPROVAL_REQUIRED"
+  | "APPROVAL_RESUMED"
+  | "MODEL_TURN";
+
+export type HarnessStatusDto = "OK" | "FAILED" | "PENDING" | "INFO";
+
+export interface HarnessSessionDto {
+  purpose: string;
+  trueforge_session_id: string;
+  world_id: string | null;
+  status: string;
+  last_turn_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HarnessTraceEntryDto {
+  trace_id: string;
+  timestamp: string;
+  session_id: string;
+  purpose: string;
+  world_id: string | null;
+  category: HarnessCategoryDto;
+  status: HarnessStatusDto;
+  summary: string;
+  tool_name: string;
+  mcp_server: string;
+  thread_id: string;
+  sandbox_id: string;
+  exit_code: number | null;
+}
+
+export interface HarnessTraceDto {
+  run_id: string;
+  /** `"available"` or `"unavailable"` — the backend never guesses. */
+  trueforge_status: string;
+  detail: string;
+  sessions: HarnessSessionDto[];
+  entries: HarnessTraceEntryDto[];
+}

@@ -1,0 +1,47 @@
+name: Frontend CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  frontend-checks:
+    name: Sanity Checks for Frontend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          # Matches the toolchain the app is developed against. `cache: npm`
+          # keys off the lockfile, which is why the path is named explicitly.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        # `ci` rather than `install`: it installs exactly the lockfile and fails
+        # if package.json and the lockfile have drifted apart.
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        # The suite mocks fetch and never opens a socket, so no service is
+        # needed here and none is started.
+        run: npm run test -- --run
+
+      - name: Build
+        run: npm run build

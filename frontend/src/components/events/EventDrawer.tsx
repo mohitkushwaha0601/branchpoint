@@ -10,10 +10,18 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 
 import { useRunView } from "../../app/runView";
+import type { HarnessTraceState } from "../../hooks/useHarnessTrace";
 import type { RunEvent } from "../../types/run";
 import { AuthorityBadge } from "../run/StatusBadge";
+import { HarnessTrace } from "./HarnessTrace";
 
-const TABS = ["Events", "Evidence", "Agents", "MCP", "Sandbox"] as const;
+/**
+ * Harness leads, because it is the tab that answers "did TrueForge really do
+ * this?". It replaces the old Agents / MCP / Sandbox tabs outright: those three
+ * described capabilities in prose, and this one shows the runtime's own record
+ * of exercising them.
+ */
+const TABS = ["Harness", "Events", "Evidence"] as const;
 type Tab = (typeof TABS)[number];
 
 const CHANNEL_TONE: Record<RunEvent["channel"], string> = {
@@ -156,61 +164,13 @@ function EvidenceTab() {
  * is real. Per-agent tool inventories and sandbox configuration are not exposed
  * over HTTP and are therefore not claimed here.
  */
-function AgentsTab() {
-  const { run } = useRunView();
-  const sessions = run.events.filter((event) =>
-    event.message.includes("session "),
-  );
-  if (sessions.length === 0) {
-    return (
-      <p className="px-2 font-mono text-[11px] text-fg-faint">
-        No agent sessions bound yet.
-      </p>
-    );
-  }
-  return (
-    <ul className="space-y-0.5 px-2 font-mono text-[11px] text-fg-dim">
-      {sessions.map((event) => (
-        <li key={event.eventId}>
-          {event.message}
-          {event.worldId ? ` · ${event.worldId}` : ""}
-        </li>
-      ))}
-    </ul>
-  );
-}
 
-function McpTab() {
-  return (
-    <div className="px-2 font-mono text-[11px] text-fg-dim">
-      <p className="text-fg-faint">
-        MCP server inventory is not exposed over the public API. BRANCHPOINT
-        registers its tools with TrueForge directly, and TrueForge is never
-        reachable from this page.
-      </p>
-    </div>
-  );
-}
 
-function SandboxTab() {
-  return (
-    <div className="px-2 font-mono text-[11px] text-fg-dim">
-      <p className="mb-1">
-        Sandbox activity is not exposed over the public API.
-      </p>
-      <p className="text-fg-faint">
-        The boundary it sits behind is unchanged: DOPPELGÄNGER sandbox output is
-        EXPLORATORY and can never veto a world. Only BRANCHPOINT&rsquo;s own
-        replay produces the VERIFIED evidence a veto requires.
-      </p>
-    </div>
-  );
-}
 
-export function EventDrawer() {
+export function EventDrawer({ harness }: { harness?: HarnessTraceState }) {
   const [expanded, setExpanded] = useState(false);
-  const [tab, setTab] = useState<Tab>("Events");
-  const { run } = useRunView();
+  const [tab, setTab] = useState<Tab>("Harness");
+  const { run, selectedWorldId, selectWorld } = useRunView();
 
   return (
     <div className="shrink-0 border-t border-edge bg-surface">
@@ -255,7 +215,9 @@ export function EventDrawer() {
         </div>
 
         <span className="ml-auto pr-2 font-mono text-[10px] text-fg-faint">
-          {run.events.length} events
+          {Array.isArray(harness?.trace?.entries)
+            ? `${harness.trace.entries.length} harness · ${run.events.length} events`
+            : `${run.events.length} events`}
         </span>
       </div>
 
@@ -266,11 +228,16 @@ export function EventDrawer() {
           aria-label={tab}
           className="h-[var(--drawer-expanded)] overflow-y-auto border-t border-edge-muted px-2 py-2"
         >
+          {tab === "Harness" ? (
+            <HarnessTrace
+              trace={harness?.trace ?? null}
+              unreachable={harness?.error?.isUnreachable ?? false}
+              selectedWorldId={selectedWorldId}
+              onSelectWorld={selectWorld}
+            />
+          ) : null}
           {tab === "Events" ? <EventsTab /> : null}
           {tab === "Evidence" ? <EvidenceTab /> : null}
-          {tab === "Agents" ? <AgentsTab /> : null}
-          {tab === "MCP" ? <McpTab /> : null}
-          {tab === "Sandbox" ? <SandboxTab /> : null}
         </div>
       ) : null}
     </div>

@@ -92,6 +92,21 @@ class Settings(BaseSettings):
     the machine-verifiable failing evidence a veto requires.
     """
 
+    trueforge_skill_name: str = ""
+    """Name of a TrueForge Skill to mount on DOPPELGÄNGER sessions.
+
+    Empty by default, and empty means the agent spec carries no ``skills`` key
+    at all — the hero path is exactly what it was.
+
+    It is opt-in because a skill is registered with TrueForge *out of band*
+    (``PUT /api/v1/settings/skills`` with a git manifest) and referenced here by
+    name. Naming a skill TrueForge has not been given would fail at session
+    creation, which is the one place a failure is least affordable. Register the
+    skill first, confirm it, then set this.
+
+    See ``trueforge/skills/incident-counterfactual-review/SKILL.md``.
+    """
+
     cors_allow_origins: str = ""
     """Comma-separated browser origins allowed to call this API.
 

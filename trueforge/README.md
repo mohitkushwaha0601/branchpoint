@@ -108,6 +108,32 @@ If the sandbox is unavailable, the adversary fails closed like any other TrueFor
 
 The only authoritative path is a typed `CounterexampleSpec` replayed by BRANCHPOINT against the world's own isolated snapshot. Every operation in that spec maps to a named, allowlisted demo primitive; there is no way to submit code. Sandbox-generated code never runs in the FastAPI process, and the sandbox cannot reach reality.
 
+## Skills (optional, opt-in)
+
+`skills/incident-counterfactual-review/SKILL.md` is a reusable adversarial
+incident-review playbook. TrueForge 0.1.4 mounts skills by name in the agent
+spec (`skills: [{name}]`) after they are registered out of band with a git
+manifest — verified in its client bundle as `{type, url, name, ref, path?}`:
+
+```bash
+curl -X PUT http://localhost:8790/api/v1/settings/skills \
+  -H 'content-type: application/json' \
+  -d '{"manifest":{"type":"git",
+       "name":"incident-counterfactual-review",
+       "url":"https://github.com/<owner>/branchpoint",
+       "ref":"main",
+       "path":"trueforge/skills/incident-counterfactual-review"}}'
+
+# only once TrueForge confirms the skill:
+export BRANCHPOINT_TRUEFORGE_SKILL_NAME=incident-counterfactual-review
+```
+
+It is **off by default and deliberately so**. Registration is a git clone
+TrueForge performs itself, and naming a skill it has not been given would fail
+at session creation — the one place a failure is least affordable. With the
+variable unset the DOPPELGÄNGER spec carries no `skills` key at all, which is
+exactly the hero path as shipped.
+
 ## Sessions and resume
 
 TrueForge persists sessions, turns, and events in SQLite. BRANCHPOINT stores only a `TrueForgeSessionBinding` (`run_id`, optional `world_id`, purpose, `trueforge_session_id`, status, `last_turn_id`, pending tool-call id) so a domain run can be reconnected to its sessions after a restart. Re-binding the same run/world/purpose updates in place, so an interrupted run cannot duplicate a world or a commit.

@@ -151,6 +151,7 @@ def build_agent_orchestrator() -> BranchpointOrchestrator:
             bindings=bindings,
             mcp_server_name=settings.trueforge_mcp_server_name,
             sandbox_enabled=settings.trueforge_sandbox_enabled,
+            skill_name=settings.trueforge_skill_name,
         ),
         mutator=DemoRealityMutator(engine, capability_store),
         verifier=DemoRealityVerifier(engine),

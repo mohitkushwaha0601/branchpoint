@@ -40,6 +40,9 @@ EVENT_MODEL_MESSAGE = "model.message"
 EVENT_TOOL_RESPONSE = "tool.response"
 EVENT_SANDBOX_CREATED = "sandbox.created"
 EVENT_TOOL_APPROVAL_REQUIRED = "tool.approval_required"
+EVENT_TURN_CREATED = "turn.created"
+EVENT_TURN_DONE = "turn.done"
+EVENT_USER_TOOL_APPROVAL = "user.tool_approval"
 
 #: The root agent's thread id in TrueForge. Subagents get their own thread ids.
 ROOT_THREAD_ID = "main"
@@ -71,6 +74,18 @@ TOOL_INFO_TYPE_SYSTEM = "truefoundry-system"
 #: never reported there. It lives **only** inside the wrapper's own arguments,
 #: which is therefore the single authority on what a deferred call will do.
 DEFERRED_TOOL_NAME = "call_tool"
+
+#: TrueForge's own local tool names, taken from the 0.1.4 client bundle:
+#:
+#:     var Od = "create_sub_agent", $d = "ask_user_question",
+#:         kd = new Set(["exec", "sandbox_exec"]),
+#:         Fd = new Set(["call_tool", "list_tools", "get_tool_info"]);
+#:
+#: They are constants here rather than inline strings so the harness trace
+#: classifies a call by what TrueForge actually calls it, not by a guess.
+SUBAGENT_TOOL_NAME = "create_sub_agent"
+SANDBOX_EXEC_TOOL_NAMES = frozenset({"exec", "sandbox_exec"})
+MCP_WRAPPER_TOOL_NAMES = frozenset({"call_tool", "list_tools", "get_tool_info"})
 
 #: The exact key set of a ``call_tool`` wrapper. Exact, not minimum: an
 #: unrecognised key means BRANCHPOINT is reading a wrapper it does not fully

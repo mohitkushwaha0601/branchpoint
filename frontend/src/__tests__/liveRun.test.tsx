@@ -179,6 +179,7 @@ describe("real events", () => {
 
     await screen.findByRole("heading", { level: 1, name: "Checkout Regression" });
     await user.click(await screen.findByRole("button", { name: /SHOW/ }));
+    await user.click(screen.getByRole("tab", { name: "Events" }));
 
     const panel = screen.getByRole("tabpanel", { name: "Events" });
     expect(within(panel).getByText("run opened for incident incident_1")).toBeInTheDocument();
@@ -194,6 +195,7 @@ describe("real events", () => {
 
     await screen.findByRole("heading", { level: 1, name: "Checkout Regression" });
     await user.click(await screen.findByRole("button", { name: /SHOW/ }));
+    await user.click(screen.getByRole("tab", { name: "Events" }));
     await user.click(
       within(screen.getByRole("tabpanel", { name: "Events" })).getByRole("button", {
         name: /world_alpha VETOED/,

@@ -21,6 +21,7 @@ import { StageRail } from "../components/run/StageRail";
 import { RunSidebar } from "../components/shell/RunSidebar";
 import { ActivityDot, ErrorBanner } from "../components/shell/StatusStrip";
 import { WorkspaceLayout } from "../components/shell/WorkspaceLayout";
+import { useHarnessTrace } from "../hooks/useHarnessTrace";
 import { useLiveRun } from "../hooks/useLiveRun";
 import { useRunList } from "../hooks/useRunList";
 import type { Run } from "../types/run";
@@ -30,6 +31,9 @@ export function RunPage() {
   const { run, loading, error, polling, refresh } = useLiveRun(runId);
   // Re-read the list whenever the run's status changes, so the sidebar follows.
   const { runs } = useRunList(run?.status);
+  // The harness trace changes only when the harness does something, so it is
+  // keyed on the run's status rather than re-fetched on every poll tick.
+  const harness = useHarnessTrace(runId, run?.status);
   const [inspectorOpen, setInspectorOpen] = useState(false);
 
   const sidebar = <RunSidebar runs={runs} currentRunId={runId} />;
@@ -98,7 +102,7 @@ export function RunPage() {
             onClose={() => setInspectorOpen(false)}
           />
         }
-        drawer={<EventDrawer />}
+        drawer={<EventDrawer harness={harness} />}
       />
     </RunViewProvider>
   );

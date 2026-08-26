@@ -235,6 +235,17 @@ class TrueForgeClient:
         payload = await self._request("GET", f"/api/v1/sessions/{session_id}/turns/{turn_id}")
         return dict(payload.get("data", payload))
 
+    async def list_session_events(self, session_id: str) -> tuple[TurnEvent, ...]:
+        """Fetch every event a session has emitted, across all of its turns.
+
+        Verified present on TrueForge 0.1.4 as
+        ``GET /api/v1/sessions/{session_id}/events``. Used for the harness
+        trace, where a per-turn read would miss the second turn a commit
+        operator produces when BRANCHPOINT resumes its paused approval.
+        """
+        payload = await self._request("GET", f"/api/v1/sessions/{session_id}/events")
+        return tuple(TurnEvent.model_validate(item) for item in payload.get("data", []))
+
     async def list_turn_events(self, session_id: str, turn_id: str) -> tuple[TurnEvent, ...]:
         """Fetch the event log for one turn."""
         payload = await self._request(
