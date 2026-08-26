@@ -14,6 +14,7 @@ it already holds — and then through independent verification.
 """
 
 from datetime import datetime
+from enum import StrEnum
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -35,10 +36,16 @@ from app.application.orchestration.approval import (
 )
 from app.core.config import ModelNotConfiguredError, Settings, get_settings
 from app.domain.comparison.models import ComparisonResult
+from app.domain.evidence.models import Evidence, EvidenceKind, EvidenceSeverity
 from app.domain.incidents.models import Incident, IncidentSeverity
-from app.domain.primitives import new_id, utc_now
+from app.domain.primitives import ScalarValue, new_id, utc_now
 from app.domain.runs.lifecycle import RunStatus
-from app.domain.worlds.models import World
+from app.domain.worlds.models import Counterexample, CounterexampleStatus, World
+from app.domain.worlds.verdicts import (
+    counterexample_vetoes,
+    disqualifying_evidence,
+    vetoing_counterexamples,
+)
 from app.infrastructure.trueforge.errors import TrueForgeError
 
 router = APIRouter(prefix="/api/v1", tags=["agent-runs"])
@@ -128,6 +135,169 @@ class AgentRunResponse(BaseModel):
     detail: str
 
 
+class EvidenceResponse(BaseModel):
+    """One observation about a world, with its authority stated rather than implied.
+
+    ``machine_verifiable`` is the authority bit and it comes straight off the
+    domain model: only evidence carrying it may disqualify a world. A client
+    must never infer authority from ``source`` — a TrueForge sandbox probe and a
+    BRANCHPOINT replay both have a source string, and only one of them counts.
+
+    ``disqualifying`` is the domain's own :attr:`Evidence.disqualifies`
+    (machine-verifiable *and* failing), exposed so the client does not have to
+    recombine the two and risk recombining them differently.
+    """
+
+    evidence_id: str
+    kind: EvidenceKind
+    source: str
+    claim: str
+    world_id: str | None
+    observed: ScalarValue
+    expected: ScalarValue
+    passed: bool | None
+    severity: EvidenceSeverity
+    machine_verifiable: bool
+    disqualifying: bool
+    artifact: str | None
+    recorded_at: datetime
+
+    @classmethod
+    def from_domain(cls, evidence: Evidence) -> "EvidenceResponse":
+        """Build the response from a domain evidence record."""
+        return cls(
+            evidence_id=evidence.evidence_id,
+            kind=evidence.kind,
+            source=evidence.source,
+            claim=evidence.claim,
+            world_id=evidence.world_id,
+            observed=evidence.observed,
+            expected=evidence.expected,
+            passed=evidence.passed,
+            severity=evidence.severity,
+            machine_verifiable=evidence.machine_verifiable,
+            disqualifying=evidence.disqualifies,
+            artifact=evidence.artifact,
+            recorded_at=evidence.recorded_at,
+        )
+
+
+class CounterexampleResponse(BaseModel):
+    """One adversarial attack against a world, and what it is allowed to prove.
+
+    ``status`` is what the attack claimed. ``authoritative`` is whether
+    BRANCHPOINT agrees — computed by the domain's own
+    :func:`counterexample_vetoes`, which requires both a reproduction *and*
+    machine-verifiable failing evidence behind it.
+
+    Those two can disagree, and that disagreement is the point: an adversary
+    that asserts ``REPRODUCED`` without disqualifying evidence serializes as
+    ``reproduced=true, authoritative=false`` and vetoes nothing.
+    """
+
+    counterexample_id: str
+    world_id: str
+    title: str
+    hypothesis: str
+    status: CounterexampleStatus
+    reproduced: bool
+    authoritative: bool
+    created_at: datetime
+    reproduction_steps: tuple[str, ...]
+    evidence_ids: tuple[str, ...]
+    #: The subset of ``evidence_ids`` that is machine-verifiable and failing —
+    #: i.e. the replay results that actually justify this attack.
+    supporting_evidence_ids: tuple[str, ...]
+
+    @classmethod
+    def from_domain(
+        cls, counterexample: Counterexample, evidence_by_id: dict[str, Evidence]
+    ) -> "CounterexampleResponse":
+        """Build the response, deciding authority through the domain rule."""
+        return cls(
+            counterexample_id=counterexample.attack_id,
+            world_id=counterexample.world_id,
+            title=counterexample.title,
+            hypothesis=counterexample.hypothesis,
+            status=counterexample.status,
+            reproduced=counterexample.status is CounterexampleStatus.REPRODUCED,
+            authoritative=counterexample_vetoes(counterexample, evidence_by_id),
+            created_at=counterexample.created_at,
+            reproduction_steps=counterexample.reproduction_steps,
+            evidence_ids=counterexample.evidence_ids,
+            supporting_evidence_ids=tuple(
+                evidence_id
+                for evidence_id in counterexample.evidence_ids
+                if (item := evidence_by_id.get(evidence_id)) is not None and item.disqualifies
+            ),
+        )
+
+
+class VetoBasis(StrEnum):
+    """Which of the two authoritative paths produced a veto.
+
+    Mirrors :func:`app.domain.worlds.verdicts.derive_verdict`, which vetoes
+    either on a substantiated counterexample or on standalone machine-verifiable
+    failing evidence. Both are authoritative; neither can come from model prose.
+    """
+
+    REPRODUCED_COUNTEREXAMPLE = "REPRODUCED_COUNTEREXAMPLE"
+    MACHINE_VERIFIABLE_FAILURE = "MACHINE_VERIFIABLE_FAILURE"
+
+
+class WorldVetoResponse(BaseModel):
+    """Structured linkage from a veto to the evidence that justified it.
+
+    Exists so a client never has to parse ``verdict_reason`` to find out what
+    vetoed a world. ``authoritative`` is ``True`` by construction: a veto is only
+    ever produced by evidence that qualifies, so a non-authoritative veto is not
+    a thing this API can represent.
+    """
+
+    basis: VetoBasis
+    #: Absent when the veto came from standalone failing evidence.
+    counterexample_id: str | None
+    #: The machine-verifiable failing evidence behind the veto.
+    evidence_ids: tuple[str, ...]
+    authoritative: bool
+    summary: str
+
+    @classmethod
+    def from_domain(cls, world: World) -> "WorldVetoResponse | None":
+        """Return the veto linkage for ``world``, or ``None`` if it was not vetoed.
+
+        Both branches delegate to the domain's own rules rather than re-deriving
+        them here, so this can never disagree with the verdict it describes.
+        """
+        vetoing = vetoing_counterexamples(world)
+        if vetoing:
+            index = world.evidence_by_id
+            first = vetoing[0]
+            return cls(
+                basis=VetoBasis.REPRODUCED_COUNTEREXAMPLE,
+                counterexample_id=first.attack_id,
+                evidence_ids=tuple(
+                    evidence_id
+                    for counterexample in vetoing
+                    for evidence_id in counterexample.evidence_ids
+                    if (item := index.get(evidence_id)) is not None and item.disqualifies
+                ),
+                authoritative=True,
+                summary=first.title,
+            )
+
+        failing = disqualifying_evidence(world)
+        if failing:
+            return cls(
+                basis=VetoBasis.MACHINE_VERIFIABLE_FAILURE,
+                counterexample_id=None,
+                evidence_ids=tuple(item.evidence_id for item in failing),
+                authoritative=True,
+                summary=", ".join(item.claim for item in failing),
+            )
+        return None
+
+
 class WorldDetailResponse(BaseModel):
     """One world with its measured outcome and evidence counts."""
 
@@ -146,12 +316,23 @@ class WorldDetailResponse(BaseModel):
     evidence_count: int
     counterexample_count: int
     reproduced_counterexamples: int
+    #: How many counterexamples BRANCHPOINT actually accepts as substantiated.
+    #: Can be lower than ``reproduced_counterexamples``: claiming a reproduction
+    #: is not the same as having evidence for one.
+    authoritative_counterexamples: int
+    #: Structured linkage to what vetoed this world, or ``null``.
+    veto: WorldVetoResponse | None
 
     @classmethod
     def from_domain(cls, world: World) -> "WorldDetailResponse":
         """Build the response from a domain world."""
         outcome = world.outcome
+        index = world.evidence_by_id
         return cls(
+            authoritative_counterexamples=sum(
+                1 for cx in world.counterexamples if counterexample_vetoes(cx, index)
+            ),
+            veto=WorldVetoResponse.from_domain(world),
             world_id=world.world_id,
             status=str(world.status),
             verdict=str(world.verdict) if world.verdict else None,
@@ -167,7 +348,39 @@ class WorldDetailResponse(BaseModel):
             evidence_count=len(world.evidence),
             counterexample_count=len(world.counterexamples),
             reproduced_counterexamples=sum(
-                1 for cx in world.counterexamples if str(cx.status) == "REPRODUCED"
+                1 for cx in world.counterexamples if cx.status is CounterexampleStatus.REPRODUCED
+            ),
+        )
+
+
+class WorldInspectionResponse(BaseModel):
+    """Everything BRANCHPOINT recorded about one world.
+
+    The Inspector's whole chain is readable from this without parsing prose:
+    the exploratory attack (``counterexamples``, and evidence whose
+    ``machine_verifiable`` is false), what BRANCHPOINT independently replayed
+    (evidence whose ``machine_verifiable`` is true), which of those failed
+    (``disqualifying``), and what that produced (``veto``).
+    """
+
+    run_id: str
+    world: WorldDetailResponse
+    #: Domain order, which is arrival order: execution evidence, then attack
+    #: evidence, then replay evidence.
+    evidence: tuple[EvidenceResponse, ...]
+    counterexamples: tuple[CounterexampleResponse, ...]
+
+    @classmethod
+    def from_domain(cls, run_id: str, world: World) -> "WorldInspectionResponse":
+        """Build the response from a domain world."""
+        index = world.evidence_by_id
+        return cls(
+            run_id=run_id,
+            world=WorldDetailResponse.from_domain(world),
+            evidence=tuple(EvidenceResponse.from_domain(item) for item in world.evidence),
+            counterexamples=tuple(
+                CounterexampleResponse.from_domain(counterexample, index)
+                for counterexample in world.counterexamples
             ),
         )
 
@@ -378,6 +591,27 @@ async def get_run_worlds(run_id: str, repository: RunRepositoryDep) -> WorldsRes
         run_id=run_id,
         worlds=tuple(WorldDetailResponse.from_domain(world) for world in run.worlds),
     )
+
+
+@router.get("/runs/{run_id}/worlds/{world_id}", response_model=WorldInspectionResponse)
+async def get_run_world(
+    run_id: str, world_id: str, repository: RunRepositoryDep
+) -> WorldInspectionResponse:
+    """Return one world with its evidence, counterexamples, and veto linkage.
+
+    Read-only. Everything it reports is already stored on the world; this route
+    stops hiding it behind counts.
+    """
+    run = await repository.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"run {run_id} not found")
+    world = run.world(world_id)
+    if world is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"world {world_id} not found in run {run_id}",
+        )
+    return WorldInspectionResponse.from_domain(run_id, world)
 
 
 @router.get("/runs/{run_id}/comparison", response_model=ComparisonDetailResponse)

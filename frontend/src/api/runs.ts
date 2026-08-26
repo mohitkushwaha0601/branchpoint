@@ -11,6 +11,7 @@ import type {
   RunDto,
   RunListDto,
   StartRunRequest,
+  WorldInspectionDto,
   WorldsDto,
 } from "./types";
 
@@ -88,6 +89,23 @@ export function approveRun(
   return request<ApprovalDecisionDto>(
     `/api/v1/runs/${encodeURIComponent(runId)}/approval`,
     { method: "POST", body, signal },
+  );
+}
+
+/**
+ * One world with its evidence, counterexamples, and veto linkage.
+ *
+ * Everything needed to reconstruct exploratory finding → replay → reproduced
+ * counterexample → veto without parsing any human-readable string.
+ */
+export function getWorldInspection(
+  runId: string,
+  worldId: string,
+  signal?: AbortSignal,
+): Promise<WorldInspectionDto> {
+  return request<WorldInspectionDto>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/worlds/${encodeURIComponent(worldId)}`,
+    { signal },
   );
 }
 

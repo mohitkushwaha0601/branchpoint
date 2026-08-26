@@ -136,6 +136,14 @@ export function worldsDto(): WorldsDto {
         evidence_count: 3,
         counterexample_count: 1,
         reproduced_counterexamples: 1,
+        authoritative_counterexamples: 1,
+        veto: {
+          basis: "REPRODUCED_COUNTEREXAMPLE",
+          counterexample_id: "attack_7f21",
+          evidence_ids: ["ev_alpha_schema", "ev_alpha_payment"],
+          authoritative: true,
+          summary: "Schema compatibility under rollback",
+        },
       },
       {
         world_id: "world_beta",
@@ -153,6 +161,8 @@ export function worldsDto(): WorldsDto {
         evidence_count: 6,
         counterexample_count: 1,
         reproduced_counterexamples: 0,
+        authoritative_counterexamples: 0,
+        veto: null,
       },
       {
         world_id: "world_gamma",
@@ -170,6 +180,8 @@ export function worldsDto(): WorldsDto {
         evidence_count: 4,
         counterexample_count: 1,
         reproduced_counterexamples: 0,
+        authoritative_counterexamples: 0,
+        veto: null,
       },
     ],
   };

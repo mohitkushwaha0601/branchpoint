@@ -263,7 +263,11 @@ export function adaptRunWorld(
       cost_delta: null,
       evidence_count: dto.evidence_count,
       counterexample_count: dto.counterexample_count,
+      // The run-embedded world shape carries neither, and neither is guessed:
+      // a world's veto linkage comes from `/worlds`, not from this summary.
       reproduced_counterexamples: 0,
+      authoritative_counterexamples: 0,
+      veto: null,
     },
     index,
     context,

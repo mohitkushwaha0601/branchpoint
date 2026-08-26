@@ -129,6 +129,82 @@ export interface WorldDetailDto {
   evidence_count: number;
   counterexample_count: number;
   reproduced_counterexamples: number;
+  /** How many counterexamples BRANCHPOINT accepts as substantiated. */
+  authoritative_counterexamples: number;
+  /** Structured veto linkage, or null when the world was not vetoed. */
+  veto: WorldVetoDto | null;
+}
+
+/** Which authoritative path produced a veto. Mirrors the backend enum. */
+export type VetoBasisDto =
+  | "REPRODUCED_COUNTEREXAMPLE"
+  | "MACHINE_VERIFIABLE_FAILURE";
+
+/**
+ * Structured linkage from a veto to the evidence that justified it.
+ *
+ * Present exactly when a world was vetoed. Its existence is what lets a client
+ * stop parsing `verdict_reason` to find the veto-producing counterexample.
+ */
+export interface WorldVetoDto {
+  basis: VetoBasisDto;
+  /** Null when the veto came from standalone failing evidence. */
+  counterexample_id: string | null;
+  evidence_ids: string[];
+  /** True by construction: only qualifying evidence can produce a veto. */
+  authoritative: boolean;
+  summary: string;
+}
+
+/**
+ * One observation about a world.
+ *
+ * `machine_verifiable` is the authority bit — never infer authority from
+ * `source`. `disqualifying` is the backend's own combination of
+ * machine-verifiable *and* failing.
+ */
+export interface EvidenceDto {
+  evidence_id: string;
+  kind: string;
+  source: string;
+  claim: string;
+  world_id: string | null;
+  observed: string | number | boolean | null;
+  expected: string | number | boolean | null;
+  passed: boolean | null;
+  severity: string;
+  machine_verifiable: boolean;
+  disqualifying: boolean;
+  artifact: string | null;
+  recorded_at: string;
+}
+
+/**
+ * One adversarial attack.
+ *
+ * `reproduced` is what the attack claimed; `authoritative` is whether
+ * BRANCHPOINT agrees. They can disagree, and that is the point.
+ */
+export interface CounterexampleDto {
+  counterexample_id: string;
+  world_id: string;
+  title: string;
+  hypothesis: string;
+  status: string;
+  reproduced: boolean;
+  authoritative: boolean;
+  created_at: string;
+  reproduction_steps: string[];
+  evidence_ids: string[];
+  supporting_evidence_ids: string[];
+}
+
+/** Everything BRANCHPOINT recorded about one world. */
+export interface WorldInspectionDto {
+  run_id: string;
+  world: WorldDetailDto;
+  evidence: EvidenceDto[];
+  counterexamples: CounterexampleDto[];
 }
 
 export interface WorldsDto {
