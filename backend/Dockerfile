@@ -7,6 +7,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Install system dependencies for diagnostics and debugging
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first for better Docker layer caching.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
@@ -14,14 +20,17 @@ RUN uv sync --frozen --no-dev --no-install-project
 # Copy only application code required at runtime.
 COPY README.md ./
 COPY app ./app
+COPY setup_trueforge_railway.sh ./
+RUN chmod +x setup_trueforge_railway.sh
 
 # Install the project into the environment after source is present.
 RUN uv sync --frozen --no-dev
 
-# Create and use a non-root user.
-RUN useradd --create-home --uid 10001 appuser
+# Create and use a non-root user. The app's .venv must be writable by that user.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use Railway's PORT variable (defaults to 8000 if not set)
+CMD ["sh", "-c", "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -52,3 +52,5 @@ hero-archive/
 *.sw?
 
 .claude/
+venv/.env
+venv/

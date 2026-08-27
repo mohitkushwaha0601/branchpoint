@@ -152,6 +152,74 @@ Open `http://localhost:5173/runs` and press **Run BRANCHPOINT**.
 No model, TrueForge, or Daytona credential ever reaches the browser. The model
 provider's key lives in TrueForge; BRANCHPOINT holds none.
 
+## Deployed setup
+
+The current deployment uses Vercel for the frontend and Railway for the backend
+services.
+
+| Component | Deployment | Port / URL |
+|---|---|---|
+| Frontend | Vercel | https://branchpoint-three.vercel.app |
+| BRANCHPOINT backend | Railway service branchpoint | private port 8000 |
+| Backend health | Railway | https://branchpoint-production.up.railway.app/health |
+| TrueForge | Railway service TrueForge | private port 8080 |
+| TrueForge private URL | Railway | http://trueforge.railway.internal:8080 |
+| Backend private URL | Railway | http://branchpoint.railway.internal:8000 |
+| MCP URL | TrueForge to backend | http://branchpoint.railway.internal:8000/mcp |
+
+Railway private hostnames resolve only from another service in the same Railway
+environment. The public backend domain is for browser traffic; the private
+URLs are for TrueForge-to-backend communication.
+
+### Vercel configuration
+
+~~~
+Root Directory: frontend
+Framework Preset: Vite
+Install Command: npm ci
+Build Command: npm run build
+Output Directory: dist
+Node.js Version: 22.x
+~~~
+
+Set VITE_API_BASE_URL to https://branchpoint-production.up.railway.app for
+Preview and Production. Vercel uses the native Vite build; the frontend
+Dockerfile is for CI/container validation.
+
+### Railway configuration
+
+Set these variables on the Railway service named branchpoint:
+
+~~~
+PORT=8000
+BRANCHPOINT_ENV=production
+BRANCHPOINT_TRUEFORGE_BASE_URL=http://trueforge.railway.internal:8080
+BRANCHPOINT_MODEL=<exact model configured in TrueForge>
+BRANCHPOINT_CORS_ALLOW_ORIGINS=https://branchpoint-three.vercel.app,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000
+~~~
+
+Set the TrueForge service variable:
+
+~~~
+BACKEND_URL=http://branchpoint.railway.internal:8000/mcp
+~~~
+
+TrueForge must have a provider-backed model configured. A model appearing in
+its local catalog is not sufficient if the upstream provider rejects the model
+ID. For the direct OpenAI provider, use a model ID the OpenAI account can access.
+
+The deterministic backend smoke flow does not require TrueForge:
+
+~~~
+BP_BASE_URL=https://branchpoint-production.up.railway.app
+curl -sS $BP_BASE_URL/health
+curl -sS $BP_BASE_URL/openapi.json
+curl -sS $BP_BASE_URL/api/v1/demo/state
+~~~
+
+The deterministic run should progress to AWAITING_APPROVAL. Do not run approval,
+reset, or commit operations as part of a basic health check.
+
 ## Tests
 
 | | |

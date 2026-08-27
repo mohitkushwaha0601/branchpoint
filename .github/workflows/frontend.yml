@@ -1,4 +1,4 @@
-name: Frontend CI
+name: Frontend Sanity
 
 on:
   push:
@@ -45,3 +45,7 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Docker build check
+        working-directory: .
+        run: docker build --file frontend/Dockerfile --tag branchpoint-frontend:ci frontend
