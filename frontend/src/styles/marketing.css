@@ -15,6 +15,16 @@
   overflow-x: clip;
   overscroll-behavior-y: contain;
 
+  /* The containing block for the header and the skip link.
+     Without this, `.bp-mheader`'s `position: absolute` resolves against the
+     initial containing block — the viewport — which makes it behave like
+     `position: fixed`: a transparent bar pinned at the top of the screen
+     forever, scrolling over every section beneath the hero. That was invisible
+     while the page ended in a blank placeholder and became a collision the
+     moment real content landed under it. The header is meant to sit *in* the
+     hero scene and leave with it. */
+  position: relative;
+
   background: var(--bp-void);
   color: var(--text);
   font-size: 15px;

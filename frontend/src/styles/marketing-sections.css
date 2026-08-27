@@ -1,0 +1,958 @@
+/*
+ * Landing sections below the hero.
+ *
+ * Kept out of `marketing.css` deliberately: that file is the hero's scene-space
+ * geometry and the shell, it is already 700 lines, and the two have no shared
+ * concerns. Everything here is still scoped under `.bp-marketing`, so Mission
+ * Control is untouched.
+ *
+ * The hero ends on near-black deck. Section 01 opens on the same value with no
+ * rule and no seam, so the page reads as continuing down rather than starting a
+ * new document.
+ */
+
+.bp-marketing {
+  /* Section rhythm, shared by every band below the hero. */
+  --bp-sec-y: clamp(72px, 9vh, 132px);
+  --bp-line: #1b222c;
+  --bp-panel: #0c1016;
+  /* One step below --text-muted. The system stops at three text levels and
+     these sections need a fourth for source lines and act numbering. */
+  --bp-faint: #6e7681;
+}
+
+.bp-sec {
+  position: relative;
+  padding: var(--bp-sec-y) 0;
+  background: var(--bp-void);
+}
+
+.bp-sec__inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 var(--bp-gutter);
+}
+
+.bp-sec__title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(26px, 3.1vw, 42px);
+  line-height: 1.1;
+  letter-spacing: -0.024em;
+  color: var(--text);
+  margin: 14px 0 0;
+  text-wrap: balance;
+}
+
+.bp-sec__lead {
+  margin-top: 18px;
+  max-width: 56ch;
+}
+
+.bp-sec__lead strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bp-sec__kicker {
+  margin-top: 26px;
+  max-width: 62ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.bp-sec__kicker[data-tone="fail"] {
+  color: var(--text-secondary);
+}
+
+.bp-sec__kicker code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--failure);
+  background: rgb(248 81 73 / 9%);
+  border: 1px solid rgb(248 81 73 / 22%);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+/*
+ * ============================================================ 01 · the trap
+ *
+ * The hero's last band is the dark deck the workstation stands on. Opening the
+ * section with a soft downward wash of the same value means the seam is a
+ * gradient rather than an edge.
+ */
+.bp-sec--problem {
+  background:
+    linear-gradient(180deg, #07090d 0%, var(--bp-void) 300px),
+    var(--bp-void);
+}
+
+/*
+ * The seam with the hero.
+ *
+ * The section reaches back over the bottom of the hero and fades its own ground
+ * in, so the artwork ends in a wash rather than a straight cut. It is drawn
+ * above the hero because it is a later positioned sibling, costs no scroll
+ * height because it is absolutely positioned, and is inert.
+ */
+.bp-sec--problem::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -150px;
+  height: 150px;
+  background: linear-gradient(
+    to bottom,
+    rgb(7 9 13 / 0%) 0%,
+    rgb(7 9 13 / 26%) 38%,
+    rgb(7 9 13 / 72%) 68%,
+    #07090d 100%
+  );
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------- the toggle */
+
+.bp-seg {
+  display: inline-flex;
+  margin-top: 30px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bp-panel);
+  overflow: hidden;
+}
+
+.bp-seg__option {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  min-height: 40px;
+  padding: 0 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.bp-seg__option + .bp-seg__option {
+  border-left: 1px solid var(--border);
+}
+
+.bp-seg__option:hover {
+  color: var(--text-secondary);
+}
+
+.bp-seg__option[data-active] {
+  background: rgb(240 243 246 / 7%);
+  color: var(--text);
+}
+
+.bp-seg__option:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: -2px;
+}
+
+/* ------------------------------------------------------------- the path */
+
+.bp-path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
+  margin-top: 34px;
+  max-width: 860px;
+}
+
+.bp-path__node {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bp-panel);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 76px;
+  justify-content: center;
+  transition: border-color 260ms ease, background-color 260ms ease;
+}
+
+.bp-path__kind {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+}
+
+.bp-path__body {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* The connector. In the headline reading it is an unbroken line into
+   production; in the evidence reading BRANCHPOINT sits in the middle of it. */
+.bp-path__link {
+  position: relative;
+  min-width: 132px;
+  height: 1px;
+  background: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bp-path__gate {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  padding: 5px 9px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--bp-void);
+  color: var(--bp-faint);
+  white-space: nowrap;
+  transition: color 300ms ease, border-color 300ms ease, transform 300ms ease;
+  transform: scale(0.92);
+}
+
+.bp-path__gate[data-on] {
+  color: var(--running);
+  border-color: rgb(88 166 255 / 45%);
+  transform: scale(1);
+}
+
+.bp-path__node--end[data-tone="ok"] .bp-path__body {
+  color: var(--text-secondary);
+}
+
+.bp-path__node--end[data-tone="fail"] {
+  border-color: rgb(248 81 73 / 38%);
+  background: rgb(248 81 73 / 6%);
+}
+
+.bp-path__node--end[data-tone="fail"] .bp-path__body {
+  color: var(--failure);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* ----------------------------------------------------------- the plates */
+
+.bp-plates {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+  /* Reserved so flipping between four plates and two checks never moves the
+     page under the reader. */
+  min-height: 168px;
+  align-content: start;
+}
+
+.bp-plates[data-count="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.bp-plates[data-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 860px;
+}
+
+.bp-plate {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bp-panel);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: bp-plate-in 240ms ease-out both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+.bp-plates .bp-plate:nth-child(1) { --i: 0; }
+.bp-plates .bp-plate:nth-child(2) { --i: 1; }
+.bp-plates .bp-plate:nth-child(3) { --i: 2; }
+.bp-plates .bp-plate:nth-child(4) { --i: 3; }
+
+@keyframes bp-plate-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.bp-plate__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bp-plate__value {
+  font-family: var(--font-mono);
+  font-size: clamp(20px, 2.2vw, 27px);
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.bp-plate__value--fail {
+  color: var(--failure);
+  font-size: 18px;
+  letter-spacing: 0.08em;
+}
+
+.bp-plate__note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--bp-faint);
+  overflow-wrap: anywhere;
+}
+
+.bp-plate__note--observed {
+  color: var(--text-muted);
+}
+
+.bp-plate__sev {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--failure);
+  border: 1px solid rgb(248 81 73 / 30%);
+  background: rgb(248 81 73 / 8%);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.bp-plate--check .bp-plate__label {
+  color: var(--text-secondary);
+}
+
+/*
+ * ======================================================== 02 · manyworlds
+ */
+
+.bp-sec--mw {
+  padding-bottom: calc(var(--bp-sec-y) * 1.2);
+}
+
+.bp-mw__track {
+  position: relative;
+  margin-top: 40px;
+}
+
+.bp-mw__sticky {
+  position: sticky;
+  /* Clear of the marketing header. */
+  top: var(--bp-header-h);
+  height: calc(100dvh - var(--bp-header-h));
+  display: flex;
+  align-items: center;
+}
+
+.bp-mw__frame {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* One act tall. Whichever region crosses the middle of the scroller is the
+   active act — see `useScrollActs`. */
+.bp-mw__region {
+  height: 62vh;
+}
+
+/* Dwell time on the last act. The sticky frame releases when the track's bottom
+   clears the viewport, which without this lands ~100px after the verdicts
+   appear — the reader would watch the payoff scroll away as it arrived. */
+.bp-mw__tail {
+  height: 58vh;
+}
+
+/* --------------------------------------------------------------- the rail */
+
+.bp-mw__rail {
+  display: flex;
+  gap: 26px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.bp-mw__rail-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: var(--bp-faint);
+  transition: color 260ms ease;
+}
+
+.bp-mw__rail-item[data-state="done"] {
+  color: var(--text-muted);
+}
+
+.bp-mw__rail-item[data-state="on"] {
+  color: var(--text);
+}
+
+.bp-mw__rail-num {
+  font-size: 9.5px;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.bp-mw__rail-item[data-state="on"] .bp-mw__rail-label {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-color: var(--running);
+  text-decoration-thickness: 1px;
+}
+
+/* -------------------------------------------------------------- the stage */
+
+/*
+ * The stage frames the scene; it does not raise it. Filling an area this large
+ * with the panel tone made it read as a second background rather than as a
+ * container, which is what put a visible block behind Manyworlds. Elevation
+ * here comes from the boxes inside the scene, the same way section 01 gets it
+ * from its plates.
+ */
+.bp-mw__stage {
+  border: 1px solid var(--bp-line);
+  border-radius: 5px;
+  background: transparent;
+  padding: 18px;
+}
+
+.bp-fork {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.bp-mw__caption {
+  font-family: var(--font-sans);
+  font-size: clamp(14px, 1.15vw, 16px);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 62ch;
+  min-height: 3em;
+  margin: 0;
+}
+
+/* ------------------------------------------------------------ fork scene */
+
+.bp-fork__branch {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.25;
+  /* Long enough to cover any of the three paths. */
+  stroke-dasharray: 420;
+  stroke-dashoffset: 420;
+  transition: stroke-dashoffset 460ms ease-out, stroke 300ms ease;
+}
+
+.bp-fork__branches[data-drawn] .bp-fork__branch {
+  stroke-dashoffset: 0;
+}
+
+.bp-fork__branches[data-drawn] .bp-fork__branch[data-lane="alpha"] {
+  transition-delay: 0ms;
+}
+.bp-fork__branches[data-drawn] .bp-fork__branch[data-lane="beta"] {
+  transition-delay: 70ms;
+}
+.bp-fork__branches[data-drawn] .bp-fork__branch[data-lane="gamma"] {
+  transition-delay: 140ms;
+}
+
+.bp-fork__twin rect {
+  fill: var(--bp-panel);
+  stroke: var(--border);
+  stroke-width: 1;
+  transition: stroke 320ms ease;
+}
+
+.bp-fork__twin[data-state="forked"] rect {
+  stroke: #2a3340;
+}
+
+.bp-fork__kind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  fill: var(--bp-faint);
+}
+
+.bp-fork__twin-main {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 600;
+  fill: var(--text);
+}
+
+.bp-fork__twin-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--text-muted);
+}
+
+.bp-fork__world {
+  opacity: 0;
+  transition: opacity 380ms ease-out;
+  transition-delay: calc(var(--i) * 70ms);
+}
+
+.bp-fork__world[data-visible] {
+  opacity: 1;
+}
+
+.bp-fork__world rect {
+  fill: var(--bp-panel);
+  stroke: var(--border);
+  stroke-width: 1;
+  transition: stroke 320ms ease, fill 320ms ease;
+}
+
+.bp-fork__ring {
+  fill: none;
+  stroke: transparent;
+  stroke-dasharray: 3 4;
+  transition: stroke 320ms ease;
+}
+
+.bp-fork__ring[data-on] {
+  stroke: #232c37;
+}
+
+.bp-fork__glyph {
+  font-family: var(--font-mono);
+  font-size: 21px;
+  font-weight: 600;
+  fill: var(--text-muted);
+  transition: fill 320ms ease;
+}
+
+.bp-fork__action {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  fill: var(--bp-faint);
+}
+
+.bp-fork__primary {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  fill: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-fork__secondary {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--text-muted);
+}
+
+.bp-fork__status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  fill: var(--text-muted);
+  transition: fill 320ms ease;
+}
+
+/* Tones. Note α carries no tone until the settle act — that is the point. */
+.bp-fork__world[data-tone="running"] .bp-fork__status {
+  fill: var(--running);
+}
+
+.bp-fork__world[data-tone="ok"] rect:not(.bp-fork__ring) {
+  stroke: rgb(63 185 80 / 42%);
+}
+.bp-fork__world[data-tone="ok"] .bp-fork__status,
+.bp-fork__world[data-tone="ok"] .bp-fork__glyph {
+  fill: var(--success);
+}
+
+.bp-fork__world[data-tone="fail"] rect:not(.bp-fork__ring) {
+  stroke: rgb(248 81 73 / 45%);
+  fill: #150e10;
+}
+.bp-fork__world[data-tone="fail"] .bp-fork__status,
+.bp-fork__world[data-tone="fail"] .bp-fork__glyph {
+  fill: var(--failure);
+}
+
+.bp-fork__world[data-tone="weak"] .bp-fork__status {
+  fill: var(--warning);
+}
+
+/* ------------------------------------------------------- the world table */
+
+.bp-mw__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 44px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.bp-mw__table caption {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bp-faint);
+  padding-bottom: 12px;
+}
+
+.bp-mw__table th,
+.bp-mw__table td {
+  text-align: left;
+  padding: 10px 14px 10px 0;
+  border-bottom: 1px solid var(--bp-line);
+  vertical-align: top;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.bp-mw__table thead th {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bp-faint);
+}
+
+.bp-mw__table tbody th {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bp-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-mw__table tr[data-verdict="VETOED"] td:last-child {
+  color: var(--failure);
+}
+
+.bp-mw__table tr[data-verdict="SURVIVED"] td:last-child {
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------- static / stacked acts */
+
+.bp-mw__stack {
+  list-style: none;
+  margin: 40px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 42px;
+}
+
+.bp-mw__stack-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------------------------------- stacked acts, rendered as type not SVG */
+
+.bp-mw__panel {
+  border: 1px solid var(--bp-line);
+  border-radius: 5px;
+  background: transparent;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bp-mw__twin {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 11px 13px;
+  background: var(--bp-panel);
+}
+
+.bp-mw__twin-kind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--bp-faint);
+}
+
+.bp-mw__twin-main {
+  font-family: var(--font-mono);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bp-mw__twin-sub {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.bp-mw__lanes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bp-mw__lane {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: start;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  padding: 11px 13px;
+  background: var(--bp-panel);
+}
+
+.bp-mw__lane-glyph {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+.bp-mw__lane-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.bp-mw__lane-action {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--bp-faint);
+  overflow-wrap: anywhere;
+}
+
+.bp-mw__lane-primary {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.bp-mw__lane-secondary {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.bp-mw__lane-status {
+  grid-column: 2;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.bp-mw__lane[data-tone="running"] .bp-mw__lane-status { color: var(--running); }
+
+.bp-mw__lane[data-tone="ok"] {
+  border-style: solid;
+  border-color: rgb(63 185 80 / 40%);
+}
+.bp-mw__lane[data-tone="ok"] .bp-mw__lane-status,
+.bp-mw__lane[data-tone="ok"] .bp-mw__lane-glyph { color: var(--success); }
+
+.bp-mw__lane[data-tone="fail"] {
+  border-style: solid;
+  border-color: rgb(248 81 73 / 45%);
+  background: #150e10;
+}
+.bp-mw__lane[data-tone="fail"] .bp-mw__lane-status,
+.bp-mw__lane[data-tone="fail"] .bp-mw__lane-glyph { color: var(--failure); }
+
+.bp-mw__lane[data-tone="weak"] .bp-mw__lane-status { color: var(--warning); }
+
+/*
+ * ================================================================ boundary
+ */
+
+.bp-next {
+  position: relative;
+  background: var(--bp-void);
+  padding: 54px 0 96px;
+}
+
+/* A rule that fades out at both ends rather than cutting the page in half. */
+.bp-next::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    rgb(27 34 44 / 0%) 0%,
+    var(--bp-line) 22%,
+    var(--bp-line) 78%,
+    rgb(27 34 44 / 0%) 100%
+  );
+}
+
+.bp-next__inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 var(--bp-gutter);
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.bp-next__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--bp-faint);
+}
+
+.bp-next__value {
+  font-family: var(--font-sans);
+  font-size: clamp(18px, 2vw, 24px);
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--text-muted);
+}
+
+/*
+ * ============================================================== responsive
+ */
+
+@media (max-width: 1023px) {
+  .bp-plates[data-count="4"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bp-path {
+    grid-template-columns: 1fr;
+    gap: 0;
+    max-width: 420px;
+  }
+
+  /* The connector becomes vertical, so the path still reads as a path. */
+  .bp-path__link {
+    min-width: 0;
+    width: 1px;
+    height: 48px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 639px) {
+  /* The phone crosses the seam far faster, so the wash is shorter. */
+  .bp-sec--problem::before {
+    top: -100px;
+    height: 100px;
+  }
+
+  .bp-sec {
+    padding: 56px 0;
+  }
+
+  .bp-sec__title {
+    font-size: 25px;
+    line-height: 1.14;
+  }
+
+  /* The forced break is a desktop composition device. */
+  .bp-sec__title br {
+    display: none;
+  }
+
+  .bp-seg {
+    display: flex;
+    width: 100%;
+    margin-top: 24px;
+  }
+
+  .bp-seg__option {
+    flex: 1 1 0;
+    min-height: 44px;
+    padding: 0 10px;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+  }
+
+  .bp-plates[data-count="4"],
+  .bp-plates[data-count="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: 0;
+  }
+
+  .bp-plates[data-count="2"] {
+    grid-template-columns: 1fr;
+  }
+
+  .bp-plate__value {
+    font-size: 21px;
+  }
+
+  .bp-mw__table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .bp-mw__stack {
+    gap: 34px;
+  }
+}
+
+/*
+ * ========================================================== reduced motion
+ *
+ * The scene is rendered as a static stack in this mode (the component decides
+ * that, not CSS), so what remains here is to make sure nothing else moves.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .bp-plate {
+    animation: none;
+  }
+
+  .bp-fork__branch,
+  .bp-fork__world,
+  .bp-fork__ring,
+  .bp-path__gate,
+  .bp-path__node,
+  .bp-mw__rail-item {
+    transition: none;
+  }
+}

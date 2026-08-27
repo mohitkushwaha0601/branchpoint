@@ -522,9 +522,15 @@ describe("accessibility", () => {
   });
 
   it("states the whole narrative as static text", () => {
-    renderApp("/");
+    const { container } = renderApp("/");
 
-    const narrative = screen.getByRole("list");
+    // Scoped to the hero on purpose. The sections below it have lists of their
+    // own now, and this assertion is about the hero's own static narrative —
+    // the copy a screen reader gets when the video and the animation are gone.
+    const hero = container.querySelector<HTMLElement>(".bp-hero");
+    expect(hero).not.toBeNull();
+
+    const narrative = within(hero!).getByRole("list");
     const steps = within(narrative).getAllByRole("listitem");
     expect(steps.length).toBeGreaterThanOrEqual(6);
     expect(narrative).toHaveTextContent(/World alpha is VETOED/);
