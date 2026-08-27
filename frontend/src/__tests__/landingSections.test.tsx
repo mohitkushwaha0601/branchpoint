@@ -199,13 +199,38 @@ describe("section 02 — manyworlds", () => {
   });
 });
 
-describe("the page after phase 2B", () => {
-  it("is honest about ending early", () => {
+describe("the completed page", () => {
+  it("runs the argument end to end, in order, with no placeholder left", () => {
     const { container } = renderApp("/");
 
-    expect(container.querySelector(".bp-next")).toHaveTextContent(
-      "Inspect the worlds",
+    // The nine sections below the hero, in the blueprint's order.
+    const sections = [...container.querySelectorAll(".bp-sec")].map((node) =>
+      [...node.classList].find((name) => name.startsWith("bp-sec--")),
     );
+    expect(sections).toEqual([
+      "bp-sec--problem",
+      "bp-sec--mw",
+      "bp-sec--wx",
+      "bp-sec--atk",
+      "bp-sec--cmp",
+      "bp-sec--appr",
+      "bp-sec--cv",
+      "bp-sec--arch",
+      "bp-sec--close",
+    ]);
+    // The Phase 2B "next" marker is gone: nothing is unfinished any more.
+    expect(container.querySelector(".bp-next")).toBeNull();
+  });
+
+  it("gives every section a labelled heading and keeps one h1", () => {
+    const { container } = renderApp("/");
+
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    for (const section of container.querySelectorAll(".bp-sec")) {
+      const id = section.getAttribute("aria-labelledby");
+      expect(id).not.toBeNull();
+      expect(container.querySelector(`#${id}`)).not.toBeNull();
+    }
   });
 
   it("leaves the frozen hero untouched above it", () => {

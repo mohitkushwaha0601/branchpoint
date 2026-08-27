@@ -372,6 +372,40 @@
    active act — see `useScrollActs`. */
 .bp-mw__region {
   height: 62vh;
+  /* They now sit over the pinned frame, and they are later siblings, so
+     without this they would swallow every pointer event aimed at the scene.
+     They are measurement devices and should never be hit-testable. */
+  pointer-events: none;
+}
+
+/*
+ * Pull the sentinel stack back over the sticky frame.
+ *
+ * `.bp-mw__sticky` is a normal flow sibling, so it contributes its own full
+ * height — `100dvh - header`, 836px at 1440x900 — to the track *before* the
+ * first region begins. The scene therefore pins as soon as the track reaches
+ * the header, but region 0 does not cross the scroller's mid-line until 836px
+ * later, and act 1 not until ~1060px after that. Measured: the picture froze on
+ * "Reality" for 1.18 viewports of scrolling before it moved.
+ *
+ * The sentinels are meant to measure progress *through* the pinned scene, not
+ * to queue up underneath it, so the stack is pulled back over the frame by the
+ * frame's own height. The regions are empty and inert, so this costs nothing,
+ * and it shortens the section by most of a viewport as a side effect.
+ *
+ * The `+ 50vh` is not slack. `useScrollActs` observes with
+ * `rootMargin: -50% 0px -50% 0px`, which collapses the root to a line across
+ * the middle of the scroller — so a region becomes active half a viewport
+ * *before* its top arrives. Cancelling the full sticky height therefore
+ * overshoots in the other direction and leaves act 1 alive for only ~140px.
+ * Starting the stack half a viewport down gives the first act the same 62vh of
+ * screen time as every other act.
+ *
+ * Both terms are load-bearing: the first must stay identical to
+ * `.bp-mw__sticky`'s `height`, the second to the observer's `rootMargin`.
+ */
+.bp-mw__region[data-act="0"] {
+  margin-top: calc(-1 * (100dvh - var(--bp-header-h)) + 50vh);
 }
 
 /* Dwell time on the last act. The sticky frame releases when the track's bottom
@@ -379,6 +413,7 @@
    appear — the reader would watch the payoff scroll away as it arrived. */
 .bp-mw__tail {
   height: 58vh;
+  pointer-events: none;
 }
 
 /* --------------------------------------------------------------- the rail */
@@ -800,57 +835,6 @@
 .bp-mw__lane[data-tone="fail"] .bp-mw__lane-glyph { color: var(--failure); }
 
 .bp-mw__lane[data-tone="weak"] .bp-mw__lane-status { color: var(--warning); }
-
-/*
- * ================================================================ boundary
- */
-
-.bp-next {
-  position: relative;
-  background: var(--bp-void);
-  padding: 54px 0 96px;
-}
-
-/* A rule that fades out at both ends rather than cutting the page in half. */
-.bp-next::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(
-    to right,
-    rgb(27 34 44 / 0%) 0%,
-    var(--bp-line) 22%,
-    var(--bp-line) 78%,
-    rgb(27 34 44 / 0%) 100%
-  );
-}
-
-.bp-next__inner {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 0 var(--bp-gutter);
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.bp-next__label {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--bp-faint);
-}
-
-.bp-next__value {
-  font-family: var(--font-sans);
-  font-size: clamp(18px, 2vw, 24px);
-  font-weight: 600;
-  letter-spacing: -0.018em;
-  color: var(--text-muted);
-}
 
 /*
  * ============================================================== responsive

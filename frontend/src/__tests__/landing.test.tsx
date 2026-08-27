@@ -61,9 +61,10 @@ describe("landing page", () => {
     for (const cta of ctas) {
       expect(cta).toHaveAttribute("href", "/runs");
     }
-    expect(
-      screen.getByRole("link", { name: /HOW IT WORKS/ }),
-    ).toHaveAttribute("href", "/how-it-works");
+    // The hero's secondary CTA and the closing section both point here.
+    for (const cta of screen.getAllByRole("link", { name: /HOW IT WORKS/ })) {
+      expect(cta).toHaveAttribute("href", "/how-it-works");
+    }
   });
 
   it("renders with no backend at all", () => {
@@ -372,9 +373,10 @@ describe("the phone's world", () => {
     for (const cta of screen.getAllByRole("link", { name: /SEE LIVE DEMO/ })) {
       expect(cta).toHaveAttribute("href", "/runs");
     }
-    expect(
-      screen.getByRole("link", { name: /HOW IT WORKS/ }),
-    ).toHaveAttribute("href", "/how-it-works");
+    // The hero's secondary CTA and the closing section both point here.
+    for (const cta of screen.getAllByRole("link", { name: /HOW IT WORKS/ })) {
+      expect(cta).toHaveAttribute("href", "/how-it-works");
+    }
   });
 
   it("never announces the cycling card", () => {
@@ -551,12 +553,14 @@ describe("accessibility", () => {
   });
 });
 
-describe("how it works placeholder", () => {
-  it("says plainly that it is not written yet", () => {
+describe("how it works", () => {
+  // The route's own behaviour is covered in `howItWorks.test.tsx`; this is the
+  // hero's promise being kept — the secondary CTA lands on a real page.
+  it("is a real page the hero can send a reader to", () => {
     renderApp("/how-it-works");
 
     expect(
-      screen.getByRole("heading", { level: 1, name: /Not written yet/ }),
+      screen.getByRole("heading", { level: 1, name: /nine stages/i }),
     ).toBeInTheDocument();
     for (const cta of screen.getAllByRole("link", { name: /SEE LIVE DEMO/ })) {
       expect(cta).toHaveAttribute("href", "/runs");
