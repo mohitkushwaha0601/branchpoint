@@ -25,8 +25,10 @@ import {
   WORLDS,
   type CanonicalWorld,
 } from "../../../data/canonicalIncident";
+import { useState } from "react";
+
 import { useMobileHero, useReducedMotion } from "../../hero/heroMedia";
-import { useScrollActs } from "../useScrollActs";
+import { useScrollActs, useSeenOnce } from "../useScrollActs";
 import { ACT } from "./acts";
 import { ForkScene, type LaneState } from "./ForkScene";
 
@@ -227,6 +229,26 @@ export function ManyworldsSection() {
   const current = ACTS[act] ?? ACTS[ACTS.length - 1]!;
   const lanes = WORLDS.map((world) => laneFor(world, act));
 
+  /**
+   * The scene's arrival.
+   *
+   * Without this the frame is simply *there* the instant the track reaches the
+   * header — the section above scrolls away and a fully-formed diagram is
+   * already sitting in its place, which reads as a jump cut rather than a
+   * transition. So the frame fades and rises once, as the track arrives, and
+   * only then does the act tracking take over. It is one transient on one
+   * element; nothing about the scroll behaviour below changes.
+   *
+   * Seeded `true` when there is no IntersectionObserver to drive it (jsdom,
+   * and any browser where the observer cannot resolve its root), so the failure
+   * mode is "no animation" and never "invisible scene".
+   */
+  const [entered, setEntered] = useState(
+    () => typeof IntersectionObserver !== "function",
+  );
+  // 0.12: start as the scene arrives, not once it has already settled.
+  const enterRef = useSeenOnce(animated && !entered, () => setEntered(true), 0.12);
+
   return (
     <section className="bp-sec bp-sec--mw" aria-labelledby="bp-mw-title">
       <div className="bp-sec__inner">
@@ -244,8 +266,11 @@ export function ManyworldsSection() {
 
       {animated ? (
         <div className="bp-mw__track" ref={trackRef}>
-          <div className="bp-mw__sticky">
-            <div className="bp-sec__inner bp-mw__frame">
+          <div className="bp-mw__sticky" ref={enterRef}>
+            <div
+              className="bp-sec__inner bp-mw__frame"
+              data-entered={entered ? "" : undefined}
+            >
               {/* act rail — a progress indicator, not a stepper control */}
               <ol className="bp-mw__rail" aria-hidden="true">
                 {ACTS.map((entry, index) => (

@@ -13,14 +13,47 @@
 
 .bp-marketing {
   /* Section rhythm, shared by every band below the hero. */
-  --bp-sec-y: clamp(72px, 9vh, 132px);
+  --bp-sec-y: clamp(64px, 7.5vh, 112px);
   --bp-line: #1b222c;
   --bp-panel: #0c1016;
   /* One step below --text-muted. The system stops at three text levels and
      these sections need a fourth for source lines and act numbering. */
   --bp-faint: #6e7681;
+
+  /*
+   * The vertical scale. Five steps, and every margin below the hero uses one
+   * of them.
+   *
+   * This exists because the first pass did not have it: the sections had
+   * accumulated eleven unrelated margin values — 14, 16, 18, 20, 22, 26, 30,
+   * 32, 34, 40 and 44 — each locally plausible and collectively arrhythmic, so
+   * no two sections started their content at the same distance from their own
+   * heading. Any new spacing must come from here rather than being invented at
+   * the call site.
+   *
+   *   1  hairline pairing — a line and its own footnote
+   *   2  eyebrow to title
+   *   3  title to lead, and any tight pairing
+   *   4  lead to first block, and block to block: the default
+   *   5  a real break inside one section
+   */
+  --bp-y-1: 10px;
+  --bp-y-2: 14px;
+  --bp-y-3: 22px;
+  --bp-y-4: 34px;
+  --bp-y-5: 48px;
 }
 
+/*
+ * Uniform, both edges, every section.
+ *
+ * The `× 1.2` and `× 1.15` bottom-padding multipliers that used to sit on
+ * Manyworlds and the Attack are gone. They made those two sections end 16 px
+ * and 12 px lower than every other one, which is far too small to read as
+ * intentional emphasis and far too large to be invisible — it just made the
+ * page's rhythm wobble. Sections that need more room get it from their own
+ * content, not from a thumb on the padding.
+ */
 .bp-sec {
   position: relative;
   padding: var(--bp-sec-y) 0;
@@ -40,12 +73,12 @@
   line-height: 1.1;
   letter-spacing: -0.024em;
   color: var(--text);
-  margin: 14px 0 0;
+  margin: var(--bp-y-2) 0 0;
   text-wrap: balance;
 }
 
 .bp-sec__lead {
-  margin-top: 18px;
+  margin-top: var(--bp-y-3);
   max-width: 56ch;
 }
 
@@ -55,7 +88,7 @@
 }
 
 .bp-sec__kicker {
-  margin-top: 26px;
+  margin-top: var(--bp-y-4);
   max-width: 62ch;
   font-size: 13.5px;
   line-height: 1.6;
@@ -119,7 +152,7 @@
 
 .bp-seg {
   display: inline-flex;
-  margin-top: 30px;
+  margin-top: var(--bp-y-4);
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bp-panel);
@@ -166,7 +199,7 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 0;
-  margin-top: 34px;
+  margin-top: var(--bp-y-4);
   max-width: 860px;
 }
 
@@ -248,7 +281,7 @@
 .bp-plates {
   display: grid;
   gap: 12px;
-  margin-top: 22px;
+  margin-top: var(--bp-y-3);
   /* Reserved so flipping between four plates and two checks never moves the
      page under the reader. */
   min-height: 168px;
@@ -343,13 +376,9 @@
  * ======================================================== 02 · manyworlds
  */
 
-.bp-sec--mw {
-  padding-bottom: calc(var(--bp-sec-y) * 1.2);
-}
-
 .bp-mw__track {
   position: relative;
-  margin-top: 40px;
+  margin-top: var(--bp-y-4);
 }
 
 .bp-mw__sticky {
@@ -361,11 +390,33 @@
   align-items: center;
 }
 
+/*
+ * The scene's arrival.
+ *
+ * The frame animates, never `.bp-mw__sticky` itself — a transform on a sticky
+ * element makes it a containing block and breaks the pin outright.
+ *
+ * The hidden state is written as `:not([data-entered])` rather than as the
+ * default, so a browser that never fires the observer shows the scene instead
+ * of an empty box. The component seeds `entered` to true when there is no
+ * IntersectionObserver at all, which covers the other half of that failure.
+ *
+ * The easing is the same decelerating curve the hero's status cards use, so
+ * the two cinematic moments on the page arrive the same way.
+ */
 .bp-mw__frame {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  transition:
+    opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bp-mw__frame:not([data-entered]) {
+  opacity: 0;
+  transform: translateY(24px);
 }
 
 /* One act tall. Whichever region crosses the middle of the scroller is the
@@ -412,7 +463,10 @@
    clears the viewport, which without this lands ~100px after the verdicts
    appear — the reader would watch the payoff scroll away as it arrived. */
 .bp-mw__tail {
-  height: 58vh;
+  /* Trimmed from 58vh: this is pure empty scroll, and its only job is to stop
+     the pin releasing at the same moment the verdicts land. 50vh still leaves
+     ~490px of dwell on the payoff, which is over half a screen. */
+  height: 50vh;
   pointer-events: none;
 }
 
@@ -643,7 +697,7 @@
 .bp-mw__table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 44px;
+  margin-top: var(--bp-y-5);
   font-family: var(--font-mono);
   font-size: 12.5px;
 }
@@ -696,7 +750,7 @@
 
 .bp-mw__stack {
   list-style: none;
-  margin: 40px 0 0;
+  margin: var(--bp-y-4) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -884,7 +938,7 @@
   .bp-seg {
     display: flex;
     width: 100%;
-    margin-top: 24px;
+    margin-top: var(--bp-y-3);
   }
 
   .bp-seg__option {

@@ -113,10 +113,17 @@ export function useScrollActs(
  * Used for the single auto-advance in the problem section: the reader sees the
  * headline reading, then it flips to the evidence reading on its own, once.
  * After that the control is theirs. Same root discipline as above.
+ *
+ * `threshold` is how much of the element has to be showing. It defaults to the
+ * 0.55 the problem section wants — that flip should not happen until the reader
+ * is actually looking at it — but an entrance animation needs to start as its
+ * scene *arrives*, not once it has already settled, so those callers pass
+ * something much smaller.
  */
 export function useSeenOnce(
   enabled: boolean,
   onSeen: () => void,
+  threshold = 0.55,
 ): (node: HTMLElement | null) => void {
   const [node, setNode] = useState<HTMLElement | null>(null);
   const ref = useCallback((next: HTMLElement | null) => setNode(next), []);
@@ -138,7 +145,7 @@ export function useSeenOnce(
           observer.disconnect();
         }
       },
-      { root, threshold: 0.55 },
+      { root, threshold },
     );
 
     observer.observe(node);
@@ -146,7 +153,7 @@ export function useSeenOnce(
     // `onSeen` is intentionally not a dependency: it is a one-shot trigger and
     // re-subscribing on every render would re-arm it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, node]);
+  }, [enabled, node, threshold]);
 
   return ref;
 }

@@ -31,9 +31,11 @@ import {
   WORLD_ALPHA,
   evidenceFor,
 } from "../../../data/canonicalIncident";
+import { useState } from "react";
+
 import { useMobileHero, useReducedMotion } from "../../hero/heroMedia";
 import { AuthorityChip } from "../AuthorityChip";
-import { useScrollActs } from "../useScrollActs";
+import { useScrollActs, useSeenOnce } from "../useScrollActs";
 
 const BEAT = { HYPOTHESIS: 0, HANDOFF: 1, REPLAY: 2 } as const;
 
@@ -212,6 +214,13 @@ export function AttackReplay() {
   const beat = animated ? act : BEAT.REPLAY;
   const current = BEATS[beat] ?? BEATS[BEATS.length - 1]!;
 
+  // Same arrival as the Manyworlds scene, for the same reason and on the same
+  // primitive — the two pinned scenes must not enter differently.
+  const [entered, setEntered] = useState(
+    () => typeof IntersectionObserver !== "function",
+  );
+  const enterRef = useSeenOnce(animated && !entered, () => setEntered(true), 0.12);
+
   return (
     <section className="bp-sec bp-sec--atk" aria-labelledby="bp-atk-title">
       <div className="bp-sec__inner">
@@ -229,8 +238,11 @@ export function AttackReplay() {
 
       {animated ? (
         <div className="bp-atk__track" ref={trackRef}>
-          <div className="bp-atk__sticky">
-            <div className="bp-sec__inner bp-atk__frame">
+          <div className="bp-atk__sticky" ref={enterRef}>
+            <div
+              className="bp-sec__inner bp-atk__frame"
+              data-entered={entered ? "" : undefined}
+            >
               <ol className="bp-atk__rail" aria-hidden="true">
                 {BEATS.map((entry, index) => (
                   <li
