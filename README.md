@@ -29,18 +29,18 @@ AI agents shouldn't predict the future. They should rehearse it.
 ## Team
 
 Team Name: Proof of Chaos (POC)
-Members: Yash Mishra, Udit Rawal, Mohit Kushwaha
 
+Members: Yash Mishra, Udit Rawal, Mohit Kushwaha
 
 ## Live Links
 
-Live App: https://branchpoint-three.vercel.app/
-Repository: https://github.com/mohitkushwaha0601/BranchPoint
-Commit History: https://github.com/mohitkushwaha0601/BranchPoint/commits/main/
-Pull Requests: https://github.com/mohitkushwaha0601/BranchPoint/pulls?q=
-Releases: https://github.com/mohitkushwaha0601/BranchPoint/releases
-License: https://github.com/mohitkushwaha0601/BranchPoint?tab=MIT-1-ov-file
-Demo Video: https://www.youtube.com/watch?v=rbIDI6maFDY
+- Live App: https://branchpoint-three.vercel.app/
+- Repository: https://github.com/mohitkushwaha0601/BranchPoint
+- Commit History: https://github.com/mohitkushwaha0601/BranchPoint/commits/main/
+- Pull Requests: https://github.com/mohitkushwaha0601/BranchPoint/pulls?q=
+- Releases: https://github.com/mohitkushwaha0601/BranchPoint/releases
+- License: https://github.com/mohitkushwaha0601/BranchPoint?tab=MIT-1-ov-file
+- Demo Video: https://www.youtube.com/watch?v=rbIDI6maFDY
 
 ## The problem
 
@@ -53,8 +53,7 @@ A plausible rollback can restore headline metrics while silently breaking schema
 BRANCHPOINT creates counterfactual branches before granting permission to change reality.
 
 ```
-Observe → Plan → Fork → Rehearse → Attack → Replay → Compare
-        → Human Approval → Commit → Verify
+Observe → Plan → Fork → Rehearse → Attack → Replay → Compare → Human Approval → Commit → Verify
 ```
 
 Every candidate action is executed against its own isolated copy of production. An adversary attacks each branch. BRANCHPOINT replays whatever the adversary proposes and decides for itself. A human approves exactly one bound action, and an independent verifier re-reads reality afterwards.
