@@ -27,6 +27,19 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# --- media provenance and QA scratch -----------------------------------------
+# The hero's *shipped* assets are the six files in frontend/public/hero/, and
+# those are committed. These two are the working material that produced them and
+# the evidence gathered while checking them — useful on disk, but not something
+# a clone needs to carry.
+#
+# hero-archive/ holds the pre-composite ambient masters the baked-monitor cuts
+# were composited from. They are mirrored outside the repo in
+# ~/branchpoint-hero-work/, so ignoring them here loses nothing.
+hero-archive/
+# Playwright CLI page dumps and console logs from hero QA runs.
+.playwright-cli/
+
 # --- editors and os ----------------------------------------------------------
 .DS_Store
 .idea/

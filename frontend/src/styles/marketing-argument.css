@@ -1,0 +1,2117 @@
+/*
+ * Landing sections 03 – 09.
+ *
+ * A third stylesheet rather than a longer second one, on the same reasoning
+ * that split `marketing-sections.css` out of `marketing.css`: that file is the
+ * trap and Manyworlds, this one is the argument, and they share nothing but the
+ * tokens declared on `.bp-marketing`.
+ *
+ * The rules that govern all of it:
+ *
+ *   - No new type scale and no new colours. `--running` / `--success` /
+ *     `--failure` / `--approval` and the three text levels are the whole
+ *     palette, plus `--bp-line` / `--bp-panel` / `--bp-faint` declared upstream.
+ *   - Colour never carries meaning alone. Every state also has a word, and
+ *     usually a mark.
+ *   - Only `transform` and `opacity` animate.
+ *   - Every section gets the geometry its interaction needs — the fastest way
+ *     to make nine sections look like a template is to give them all the same
+ *     rounded box.
+ */
+
+/* --------------------------------------------- authority and verdict chips */
+
+/*
+ * Each chip prints a mark (░ ■ ▲) and the band's own name, so it reads
+ * identically in greyscale, under deuteranopia, and to a screen reader.
+ */
+.bp-auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  padding: 4px 9px;
+  border-radius: 3px;
+  border: 1px solid currentcolor;
+  white-space: nowrap;
+}
+
+.bp-auth[data-size="sm"] {
+  font-size: 9px;
+  padding: 3px 7px;
+  letter-spacing: 0.12em;
+}
+
+.bp-auth[data-band="EXPLORATORY"] {
+  color: var(--text-secondary);
+  background: rgb(139 148 158 / 8%);
+}
+
+.bp-auth[data-band="DETERMINISTIC"] {
+  color: var(--running);
+  background: rgb(88 166 255 / 9%);
+}
+
+.bp-auth[data-band="PERMISSION"] {
+  color: var(--approval);
+  background: rgb(188 140 255 / 9%);
+}
+
+.bp-auth__mark {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.bp-auth__suffix {
+  opacity: 0.72;
+  letter-spacing: 0.1em;
+}
+
+.bp-authstate__who {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.bp-authstate__list {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.bp-authstate__list dt {
+  color: var(--bp-faint);
+  letter-spacing: 0.1em;
+}
+
+.bp-authstate__list dd {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.bp-verdict,
+.bp-selection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  padding: 4px 9px;
+  border-radius: 3px;
+  border: 1px solid currentcolor;
+  white-space: nowrap;
+}
+
+.bp-verdict[data-verdict="SURVIVED"] {
+  color: var(--success);
+  background: rgb(63 185 80 / 9%);
+}
+
+.bp-verdict[data-verdict="VETOED"] {
+  color: var(--failure);
+  background: rgb(248 81 73 / 9%);
+}
+
+.bp-verdict[data-verdict="INCONCLUSIVE"] {
+  color: var(--text-secondary);
+}
+
+/*
+ * Selection is not a verdict, and it is deliberately never green: γ is
+ * SURVIVED and still loses. A green "winner" badge here would contradict
+ * section 05 on the same page.
+ */
+.bp-selection {
+  border-style: dashed;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.bp-selection[data-selection="RECOMMENDED"] {
+  border-style: solid;
+  color: var(--text);
+  border-color: var(--border);
+  background: rgb(240 243 246 / 6%);
+}
+
+/*
+ * ======================================================= 03 · world explorer
+ */
+
+.bp-sec--wx {
+  background: linear-gradient(
+    180deg,
+    var(--bp-void) 0%,
+    #070a0f 40%,
+    var(--bp-void) 100%
+  );
+}
+
+.bp-wx__tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: var(--bp-y-4);
+  border-bottom: 1px solid var(--bp-line);
+}
+
+.bp-wx__tab {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  padding: 12px 18px 11px;
+  min-height: 44px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  position: relative;
+  top: 1px;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.bp-wx__tab:hover {
+  color: var(--text-secondary);
+}
+
+.bp-wx__tab[data-active] {
+  color: var(--text);
+  border-color: var(--bp-line);
+  background: var(--bp-panel);
+}
+
+/* Covers the container's own rule so the active tab joins its panel. */
+.bp-wx__tab[data-active]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--bp-panel);
+}
+
+.bp-wx__tab:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: 2px;
+}
+
+.bp-wx__tab-glyph {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.bp-wx__tab-name {
+  font-size: 12.5px;
+}
+
+.bp-wx__tab-count {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--bp-faint);
+}
+
+.bp-wx__panel {
+  border: 1px solid var(--bp-line);
+  border-top: none;
+  border-radius: 0 0 5px 5px;
+  background: var(--bp-panel);
+  padding: 22px;
+  animation: bp-fade-in 180ms ease-out both;
+}
+
+.bp-wx__panel:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: -2px;
+}
+
+@keyframes bp-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.bp-wx__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.bp-wx__panel-title {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.bp-wx__chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bp-wx__reason {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.bp-wx__body {
+  display: grid;
+  /* Asymmetric on purpose: the evidence column is the subject. */
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 26px;
+  margin-top: var(--bp-y-3);
+}
+
+.bp-wx__left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bp-wx__action {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-left: 2px solid var(--border);
+  padding-left: 14px;
+}
+
+.bp-wx__action-kind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.15em;
+  color: var(--bp-faint);
+}
+
+.bp-wx__action-body {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text);
+}
+
+.bp-wx__action-target {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.bp-wx__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  background: var(--bp-line);
+  border: 1px solid var(--bp-line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bp-wx__metric {
+  background: var(--bp-void);
+  padding: 12px 14px;
+}
+
+.bp-wx__metric dt {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bp-faint);
+}
+
+.bp-wx__metric dd {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-wx__regression {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  border-top: 1px dashed var(--bp-line);
+  padding-top: 12px;
+}
+
+.bp-wx__regression[data-active] {
+  color: var(--warning);
+}
+
+/* ------------------------------------------------------------ evidence list */
+
+.bp-evlist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.bp-evlist__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-mono);
+}
+
+.bp-evlist__title {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--bp-faint);
+}
+
+.bp-evlist__count {
+  font-size: 12px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-evlist__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bp-evlist__note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--bp-faint);
+  border-top: 1px dashed var(--bp-line);
+  padding-top: 10px;
+}
+
+.bp-ev {
+  border: 1px solid var(--bp-line);
+  border-radius: 4px;
+  background: var(--bp-void);
+  overflow: hidden;
+}
+
+.bp-ev[data-outcome="FAIL"] {
+  border-color: rgb(248 81 73 / 34%);
+}
+
+.bp-ev__head {
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px 5px;
+  text-align: left;
+  font-family: var(--font-mono);
+  min-height: 40px;
+}
+
+.bp-ev__head:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: -2px;
+}
+
+.bp-ev__mark {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.bp-ev[data-outcome="FAIL"] .bp-ev__mark {
+  color: var(--failure);
+}
+
+.bp-ev__claim {
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.bp-ev__outcome {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.bp-ev[data-outcome="FAIL"] .bp-ev__outcome {
+  color: var(--failure);
+}
+
+.bp-ev[data-outcome="PASS"] .bp-ev__outcome {
+  color: var(--success);
+}
+
+.bp-ev__sev {
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  color: var(--warning);
+  border: 1px solid currentcolor;
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.bp-ev[data-outcome="FAIL"] .bp-ev__sev {
+  color: var(--failure);
+}
+
+.bp-ev__chev {
+  font-size: 13px;
+  color: var(--bp-faint);
+  width: 12px;
+  text-align: center;
+}
+
+.bp-ev__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 0 12px 10px 33px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--bp-faint);
+}
+
+/* The only bit that carries authority, always written out in full. */
+.bp-ev__auth[data-verified] {
+  color: var(--running);
+}
+
+.bp-ev__dq {
+  color: var(--failure);
+  letter-spacing: 0.12em;
+}
+
+.bp-ev__body {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  gap: 5px 12px;
+  margin: 0;
+  padding: 11px 12px 13px 33px;
+  border-top: 1px dashed var(--bp-line);
+  background: rgb(240 243 246 / 2%);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.bp-ev__body dt {
+  color: var(--bp-faint);
+  letter-spacing: 0.08em;
+}
+
+.bp-ev__body dd {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * ========================================================== 04 · the attack
+ *
+ * The darkest ground on the page. The section reads as a descent: it opens away
+ * from the void and closes back into it.
+ */
+
+.bp-sec--atk {
+  background: radial-gradient(
+    120% 60% at 50% 0%,
+    #090c12 0%,
+    #04060a 60%,
+    #020306 100%
+  );
+}
+
+.bp-atk__track {
+  position: relative;
+  margin-top: var(--bp-y-4);
+}
+
+/*
+ * `overflow: hidden` is not decoration. A pinned box whose content is taller
+ * than the pin paints *outside* it, and because the pin is a later sibling it
+ * paints over the section heading above and the ledger below — which is exactly
+ * what happened the first time this was built. Clipping to the pin means the
+ * worst case on a very short viewport is a cropped scene rather than two
+ * sections printed on top of each other, and the ledger below the track carries
+ * the whole claim in text regardless.
+ */
+.bp-atk__sticky {
+  position: sticky;
+  top: var(--bp-header-h);
+  height: calc(100dvh - var(--bp-header-h));
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* Arrives exactly like the Manyworlds frame — see the note there. */
+.bp-atk__frame {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition:
+    opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bp-atk__frame:not([data-entered]) {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+.bp-atk__region {
+  height: 58vh;
+  /* Overlays the pinned frame as a later sibling — inert by construction. */
+  pointer-events: none;
+}
+
+/*
+ * Same correction as `.bp-mw__region[data-act="0"]`, for the same reason and
+ * with the same two terms: the sticky frame is a flow sibling and contributes
+ * its full height to the track ahead of the first sentinel, so the scene pins
+ * and then holds beat 1 for over a viewport before anything moves; and the
+ * observer's mid-line `rootMargin` means a region activates half a viewport
+ * before its top, so the stack starts 50vh down rather than at 0.
+ *
+ * Keep the first term identical to `.bp-atk__sticky`'s `height` and the second
+ * identical to the `rootMargin` in `useScrollActs`.
+ */
+.bp-atk__region[data-act="0"] {
+  margin-top: calc(-1 * (100dvh - var(--bp-header-h)) + 50vh);
+}
+
+/* Dwell on the verdict rather than releasing the pin as it lands. Trimmed from
+   48vh on the same reasoning as `.bp-mw__tail`. */
+.bp-atk__tail {
+  height: 42vh;
+  pointer-events: none;
+}
+
+.bp-atk__rail {
+  display: flex;
+  gap: 26px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.bp-atk__rail-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: #4d5661;
+  transition: color 260ms ease;
+}
+
+.bp-atk__rail-item[data-state="done"] { color: var(--text-muted); }
+.bp-atk__rail-item[data-state="on"]   { color: var(--text); }
+
+.bp-atk__rail-num {
+  font-size: 9.5px;
+  opacity: 0.7;
+}
+
+/* ------------------------ the scene: two halves and the rule between them */
+
+/*
+ * Rows are `auto`, never `1fr`. Fractional rows inside a pin resolve against
+ * the pin's height and push the two halves to opposite ends of an 836 px box,
+ * so the crossing reads as two unrelated cards rather than one moving through a
+ * boundary. The scene should be exactly as tall as its content and centred.
+ */
+.bp-atk__scene {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  gap: 16px;
+}
+
+.bp-atk__half {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.bp-atk__half--above {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.bp-atk__half-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #4d5661;
+  flex-basis: 100%;
+}
+
+.bp-atk__card {
+  border: 1px solid #232b36;
+  border-radius: 5px;
+  background: rgb(9 12 18 / 88%);
+  padding: 15px 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  flex: 1 1 380px;
+  min-width: 0;
+  transition:
+    transform 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 500ms ease,
+    opacity 400ms ease;
+}
+
+/* The crossing. A transform, so nothing around it re-lays out. */
+.bp-atk__card--hyp[data-crossed] {
+  transform: translateY(4px);
+  border-color: #2c3846;
+  opacity: 0.72;
+}
+
+/*
+ * `flex: 1 1 380px` on the card is a *width* in the row-direction half above
+ * the line, and a *height* in the column-direction half below it — which is how
+ * the replay card ended up 380 px tall while holding one sentence. Below the
+ * line the card sizes to its content and reserves the space the result will
+ * need, so the rule does not jump when the verdict lands.
+ */
+.bp-atk__half--below .bp-atk__card {
+  flex: 0 0 auto;
+  min-height: 208px;
+  justify-content: space-between;
+}
+
+.bp-atk__card--replay {
+  border-style: dashed;
+  border-color: #1d2530;
+}
+
+.bp-atk__card--replay[data-landed] {
+  border-style: solid;
+  border-color: rgb(88 166 255 / 45%);
+  background: rgb(10 17 27 / 92%);
+}
+
+.bp-atk__card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bp-atk__who {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+
+.bp-atk__card--replay[data-landed] .bp-atk__who {
+  color: var(--running);
+}
+
+.bp-atk__sbx {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--bp-faint);
+}
+
+.bp-atk__hypothesis {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 46ch;
+}
+
+.bp-atk__counters {
+  display: flex;
+  gap: 22px;
+  margin: 0;
+  flex-wrap: wrap;
+}
+
+.bp-atk__counters dt {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--bp-faint);
+}
+
+.bp-atk__counters dd {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-atk__card-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ------------------------------------------------------------- the rule */
+
+.bp-atk__rule {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 11px 0;
+  border-top: 1px solid #2a3340;
+  border-bottom: 1px solid #2a3340;
+  background: rgb(88 166 255 / 3%);
+  transition: border-color 400ms ease, background-color 400ms ease;
+}
+
+.bp-atk__rule[data-crossed] {
+  border-top-color: rgb(88 166 255 / 40%);
+  border-bottom-color: rgb(88 166 255 / 40%);
+  background: rgb(88 166 255 / 7%);
+}
+
+.bp-atk__rule-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.bp-atk__rule[data-crossed] .bp-atk__rule-label {
+  color: var(--running);
+}
+
+.bp-atk__rule-note {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--bp-faint);
+  text-align: center;
+}
+
+/* --------------------------------------------------------- the typed spec */
+
+.bp-atk__spec {
+  flex: 1 1 300px;
+  border: 1px solid #232b36;
+  border-radius: 5px;
+  background: rgb(9 12 18 / 70%);
+  padding: 13px 15px;
+  min-width: 0;
+  animation: bp-fade-in 320ms ease-out both;
+}
+
+.bp-atk__spec-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--running);
+}
+
+.bp-atk__spec-list {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 3px 12px;
+  margin: 9px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.bp-atk__spec-list dt { color: var(--bp-faint); }
+
+.bp-atk__spec-list dd {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.bp-atk__spec-note {
+  margin-top: 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--bp-faint);
+}
+
+/* ------------------------------------------------------ the replay result */
+
+.bp-atk__checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.bp-atk__checks li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 3px 10px;
+  font-family: var(--font-mono);
+}
+
+.bp-atk__check-mark {
+  color: var(--failure);
+  font-size: 11px;
+}
+
+.bp-atk__check-name {
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.bp-atk__check-outcome {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--failure);
+}
+
+.bp-atk__check-observed {
+  grid-column: 2 / -1;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.bp-atk__waiting {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #4d5661;
+}
+
+.bp-atk__status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px dashed #232b36;
+  padding-top: 10px;
+}
+
+.bp-atk__status-chip {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--running);
+  border: 1px solid rgb(88 166 255 / 45%);
+  background: rgb(88 166 255 / 10%);
+  border-radius: 3px;
+  padding: 3px 8px;
+}
+
+.bp-atk__status-rule {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--bp-faint);
+  overflow-wrap: anywhere;
+}
+
+.bp-atk__verdict {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--failure);
+}
+
+.bp-atk__caption {
+  font-family: var(--font-sans);
+  font-size: clamp(13.5px, 1.1vw, 15.5px);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 66ch;
+  min-height: 3em;
+}
+
+.bp-atk__stack {
+  list-style: none;
+  margin: var(--bp-y-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.bp-atk__stack-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/*
+ * The stacked fallback is a column, so the card's `flex: 1 1 380px` would be
+ * read as a height and leave 200 px of empty box under one sentence. Reduced
+ * motion is a first-class layout here, not a degraded one — it gets the same
+ * care as the pinned version.
+ */
+.bp-atk__stack .bp-atk__card,
+.bp-atk__stack .bp-atk__spec {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+/* --------------------------- the ledger: the same claim, in text, always */
+
+.bp-atk__ledger {
+  margin-top: var(--bp-y-5);
+  border: 1px solid #1d2530;
+  border-radius: 5px;
+  padding: 20px 22px;
+  background: rgb(9 12 18 / 60%);
+}
+
+.bp-atk__ledger-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--bp-faint);
+  font-weight: 500;
+}
+
+.bp-atk__ledger-list {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 9px 20px;
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.bp-atk__ledger-list dt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.bp-atk__ledger-list dd {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/*
+ * ========================================================== 05 · comparison
+ */
+
+.bp-cmp__wrap {
+  margin-top: var(--bp-y-4);
+  overflow-x: auto;
+}
+
+.bp-cmp__table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.bp-cmp__table--transposed {
+  min-width: 0;
+}
+
+.bp-cmp__table caption {
+  text-align: left;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: var(--bp-faint);
+  padding-bottom: 14px;
+  max-width: 72ch;
+  line-height: 1.6;
+}
+
+.bp-cmp__table th,
+.bp-cmp__table td {
+  text-align: left;
+  padding: 11px 16px 11px 0;
+  border-bottom: 1px solid var(--bp-line);
+  vertical-align: top;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.bp-cmp__table thead th {
+  border-bottom-color: #2a3340;
+  padding-bottom: 14px;
+}
+
+.bp-cmp__world {
+  display: block;
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.bp-cmp__reject {
+  display: block;
+  margin-top: 5px;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--failure);
+}
+
+.bp-cmp__reject--block {
+  margin: 12px 0 0;
+  font-family: var(--font-mono);
+}
+
+.bp-cmp__table td[data-rejected],
+.bp-cmp__table thead th[data-rejected] .bp-cmp__world {
+  position: relative;
+  color: var(--text-muted);
+}
+
+/*
+ * The strike. Drawn left to right so a reader sees removal happen rather than
+ * finding a column that was always grey.
+ */
+.bp-cmp__table td[data-rejected]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 16px;
+  top: 50%;
+  height: 1px;
+  background: rgb(248 81 73 / 60%);
+  transform-origin: left center;
+  animation: bp-strike 300ms ease-out both;
+}
+
+@keyframes bp-strike {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+.bp-cmp__axis {
+  appearance: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+.bp-cmp__axis:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: 3px;
+}
+
+.bp-cmp__axis-hint {
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bp-faint);
+  flex: none;
+}
+
+.bp-cmp__axis-explain {
+  display: block;
+  margin-top: 6px;
+  max-width: 40ch;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--bp-faint);
+}
+
+.bp-cmp__rank th,
+.bp-cmp__rank td {
+  border-bottom: none;
+  padding-top: 16px;
+  color: var(--text);
+}
+
+.bp-cmp__rec {
+  display: block;
+  margin-top: 5px;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+
+.bp-cmp__foot {
+  margin-top: var(--bp-y-3);
+  max-width: 66ch;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-muted);
+  border-left: 2px solid var(--bp-line);
+  padding-left: 14px;
+}
+
+.bp-cmp__foot--tie {
+  margin-top: var(--bp-y-1);
+  color: var(--bp-faint);
+}
+
+.bp-cmp__explains {
+  list-style: none;
+  margin: var(--bp-y-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.bp-cmp__axis-name {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.bp-cmp__seg {
+  width: 100%;
+  display: flex;
+  margin-top: 0;
+}
+
+.bp-cmp__seg .bp-seg__option {
+  flex: 1 1 0;
+  min-height: 44px;
+}
+
+/*
+ * ========================================================== 06 · checkpoint
+ *
+ * The only violet ground on the page. The tonal arc resolves here: the page has
+ * darkened through the attack and comes back up at the human gate.
+ */
+
+.bp-sec--appr {
+  background:
+    radial-gradient(
+      90% 70% at 50% 30%,
+      rgb(188 140 255 / 7%) 0%,
+      rgb(5 7 10 / 0%) 62%
+    ),
+    var(--bp-void);
+}
+
+.bp-sec--appr .bp-sec__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.bp-sec--appr .bp-sec__lead {
+  text-align: center;
+  max-width: 58ch;
+}
+
+.bp-appr__card {
+  width: 100%;
+  max-width: 560px;
+  margin-top: var(--bp-y-4);
+  text-align: left;
+  border: 1px solid rgb(188 140 255 / 32%);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #0d0f18 0%, #0a0c12 100%);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color 300ms ease;
+}
+
+.bp-appr__card[data-invalid] {
+  border-color: rgb(248 81 73 / 45%);
+}
+
+.bp-appr__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.bp-appr__world {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text);
+}
+
+.bp-appr__run {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--bp-faint);
+}
+
+.bp-appr__action {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-left: 2px solid rgb(188 140 255 / 40%);
+  padding-left: 14px;
+}
+
+.bp-appr__action-kind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.15em;
+  color: var(--bp-faint);
+}
+
+.bp-appr__action-body {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text);
+}
+
+.bp-appr__flag[data-mutated] {
+  color: var(--failure);
+  text-decoration: underline wavy;
+  text-underline-offset: 4px;
+}
+
+.bp-appr__action-meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.bp-appr__fp {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  border-top: 1px dashed var(--bp-line);
+  border-bottom: 1px dashed var(--bp-line);
+  padding: 13px 0;
+}
+
+.bp-appr__fp-label {
+  flex-basis: 100%;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--bp-faint);
+}
+
+.bp-appr__fp-algo {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.bp-appr__fp-hash {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--approval);
+  overflow-wrap: anywhere;
+}
+
+.bp-appr__fp-note {
+  flex-basis: 100%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--bp-faint);
+}
+
+/* The one flourish on the page: each glyph re-rolls in place, 24 ms apart. */
+.bp-appr__fp-hash[data-rolled] .bp-appr__fp-glyph {
+  animation: bp-roll 260ms ease-out both;
+  animation-delay: calc(var(--i) * 24ms);
+}
+
+@keyframes bp-roll {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.bp-appr__bindings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.bp-appr__bindings li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.bp-appr__bind-mark { color: var(--success); }
+
+.bp-appr__bind-state {
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--bp-faint);
+}
+
+.bp-appr__bindings li[data-failed] { color: var(--failure); }
+.bp-appr__bindings li[data-failed] .bp-appr__bind-mark,
+.bp-appr__bindings li[data-failed] .bp-appr__bind-state { color: var(--failure); }
+
+.bp-appr__stamp {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--failure);
+  border: 1px solid rgb(248 81 73 / 45%);
+  background: rgb(248 81 73 / 9%);
+  border-radius: 3px;
+  padding: 9px 12px;
+  text-align: center;
+}
+
+.bp-appr__buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.bp-appr__btn {
+  appearance: none;
+  flex: 1 1 0;
+  min-height: 48px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.bp-appr__btn--reject {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.bp-appr__btn--approve {
+  border: 1px solid transparent;
+  background: var(--approval);
+  color: #12081f;
+}
+
+.bp-appr__btn:hover { border-color: var(--text-muted); }
+.bp-appr__btn--approve:hover { background: #cba6ff; }
+
+.bp-appr__btn:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: 2px;
+}
+
+/*
+ * Disabled by `aria-disabled`, never the `disabled` attribute: a disabled
+ * button drops out of the tab order, and the reader who just broke the approval
+ * is exactly the one who should be able to reach it and read why.
+ */
+.bp-appr__btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.42;
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--bp-line);
+}
+
+.bp-appr__decision {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  min-height: 3.2em;
+}
+
+.bp-appr__controls {
+  display: flex;
+  gap: 10px;
+  margin-top: var(--bp-y-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.bp-appr__mutate,
+.bp-appr__reset {
+  appearance: none;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.bp-appr__mutate:hover,
+.bp-appr__reset:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.bp-appr__mutate:focus-visible,
+.bp-appr__reset:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: 2px;
+}
+
+.bp-appr__mutate[aria-disabled="true"],
+.bp-appr__reset[aria-disabled="true"] {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+/* Same width as the card, so the copy under it starts on the card's own left
+   edge rather than floating at some centred measure of its own. */
+.bp-sec--appr .bp-appr__controls,
+.bp-sec--appr .bp-sec__kicker {
+  width: 100%;
+  max-width: 560px;
+}
+
+.bp-sec--appr .bp-sec__kicker {
+  text-align: left;
+}
+
+/*
+ * ===================================================== 07 · commit + verify
+ */
+
+.bp-cv__bands {
+  display: grid;
+  gap: 18px;
+  margin-top: var(--bp-y-4);
+}
+
+.bp-cv__band {
+  border: 1px solid var(--bp-line);
+  border-radius: 5px;
+  padding: 20px 22px;
+  background: var(--bp-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The verify band is deliberately not a twin of the commit band: it is a
+   separate act by a separate component, and it should not look like a
+   continuation of the box above it. */
+.bp-cv__band--verify {
+  background: transparent;
+  border-style: dashed;
+}
+
+.bp-cv__band-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bp-cv__band-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--bp-faint);
+}
+
+.bp-cv__band-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--text);
+  margin-right: auto;
+}
+
+.bp-cv__gates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bp-cv__gates li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 2px 10px;
+  font-family: var(--font-mono);
+  color: var(--bp-faint);
+  transition: color 240ms ease;
+}
+
+.bp-cv__gates li[data-done] { color: var(--text-secondary); }
+
+.bp-cv__gate-mark { font-size: 11px; }
+.bp-cv__gates li[data-done] .bp-cv__gate-mark { color: var(--success); }
+.bp-cv__gate-label { font-size: 12px; }
+
+.bp-cv__gate-detail {
+  grid-column: 2;
+  font-size: 10px;
+  color: var(--bp-faint);
+  overflow-wrap: anywhere;
+}
+
+.bp-cv__mutation {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  border: 1px solid var(--bp-line);
+  border-radius: 4px;
+  padding: 13px 15px;
+  background: var(--bp-void);
+  transition: border-color 300ms ease;
+}
+
+.bp-cv__mutation[data-done] { border-color: rgb(88 166 255 / 45%); }
+
+.bp-cv__mutation-key {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+.bp-cv__mutation-change {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.bp-cv__mutation[data-done] .bp-cv__mutation-change { color: var(--running); }
+
+.bp-cv__mutation-state {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  color: var(--bp-faint);
+}
+
+.bp-cv__note {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: var(--bp-faint);
+  max-width: 68ch;
+}
+
+.bp-cv__pairs {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.bp-cv__pairs caption {
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--bp-faint);
+  padding-bottom: 10px;
+}
+
+.bp-cv__pairs th,
+.bp-cv__pairs td {
+  text-align: left;
+  padding: 9px 14px 9px 0;
+  border-bottom: 1px solid var(--bp-line);
+  font-weight: 400;
+  color: var(--bp-faint);
+  transition: color 240ms ease;
+}
+
+.bp-cv__pairs thead th {
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.bp-cv__pairs tbody tr[data-done] td { color: var(--text-secondary); }
+.bp-cv__pairs tbody tr[data-done] th { color: var(--text); }
+
+.bp-cv__tick {
+  color: var(--success);
+  width: 24px;
+}
+
+.bp-cv__pairs tbody tr[data-done] td.bp-cv__tick { color: var(--success); }
+
+.bp-cv__status {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--bp-faint);
+  transition: color 300ms ease;
+}
+
+.bp-cv__status[data-done] { color: var(--success); }
+
+/*
+ * ======================================================== 08 · architecture
+ */
+
+.bp-arch__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: 34px;
+  margin-top: var(--bp-y-4);
+  align-items: start;
+}
+
+.bp-arch__map {
+  position: relative;
+}
+
+.bp-arch__lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.bp-arch__line {
+  stroke: var(--bp-line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.bp-arch__nodes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+}
+
+.bp-arch__node {
+  appearance: none;
+  width: 100%;
+  min-height: 48px;
+  cursor: pointer;
+  border: 1px solid var(--bp-line);
+  border-left-width: 2px;
+  border-radius: 4px;
+  background: var(--bp-panel);
+  padding: 11px 14px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--font-mono);
+  text-align: left;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.bp-arch__node[data-band="EXPLORATORY"]   { border-left-color: var(--text-muted); }
+.bp-arch__node[data-band="DETERMINISTIC"] { border-left-color: var(--running); }
+.bp-arch__node[data-band="PERMISSION"]    { border-left-color: var(--approval); }
+
+.bp-arch__node[data-on] {
+  background: rgb(240 243 246 / 6%);
+  border-color: var(--border);
+}
+
+.bp-arch__node:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: 2px;
+}
+
+.bp-arch__node-name {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+}
+
+.bp-arch__node[data-on] .bp-arch__node-name { color: var(--text); }
+
+.bp-arch__node-band {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--bp-faint);
+}
+
+.bp-arch__panel {
+  border: 1px solid var(--bp-line);
+  border-radius: 5px;
+  background: var(--bp-panel);
+  padding: 22px 24px;
+  /* Fixed floor so swapping nodes never moves the map beside it. */
+  min-height: 360px;
+}
+
+.bp-arch__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--bp-line);
+}
+
+.bp-arch__panel-title {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+
+.bp-arch__panel-list {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 12px 20px;
+  margin: var(--bp-y-3) 0 0;
+  font-size: 13.5px;
+  line-height: 1.62;
+}
+
+.bp-arch__panel-list dt {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--bp-faint);
+  padding-top: 3px;
+}
+
+.bp-arch__panel-list dd {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/* The negative line is the point of the section, so it is the loudest one. */
+.bp-arch__panel-list dt.bp-arch__negative { color: var(--failure); }
+.bp-arch__panel-list dd.bp-arch__negative { color: var(--text); }
+
+.bp-arch__fact {
+  margin-top: var(--bp-y-3);
+  padding-top: 14px;
+  border-top: 1px dashed var(--bp-line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/*
+ * =============================================================== 09 · close
+ */
+
+.bp-sec--close {
+  position: relative;
+  padding: var(--bp-sec-y) 0;
+  background: var(--bp-void);
+  overflow: hidden;
+}
+
+.bp-close__mark {
+  position: absolute;
+  right: -40px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(520px, 46vw);
+  height: auto;
+  opacity: 0.2;
+  stroke: var(--bp-line);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.bp-close__inner {
+  position: relative;
+  z-index: 1;
+}
+
+.bp-close__title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(30px, 4vw, 52px);
+  line-height: 1.06;
+  letter-spacing: -0.028em;
+  color: var(--text);
+  margin-top: var(--bp-y-2);
+}
+
+.bp-close__lead {
+  margin-top: var(--bp-y-3);
+  max-width: 52ch;
+}
+
+.bp-close__ctas {
+  display: flex;
+  gap: 12px;
+  margin-top: var(--bp-y-4);
+  flex-wrap: wrap;
+}
+
+.bp-close__meta {
+  margin-top: var(--bp-y-4);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--bp-faint);
+}
+
+/*
+ * ------------------------------------------------- the attack, short screens
+ *
+ * The pin is `100dvh − header`, so a 768 px-tall laptop gives the scene 704 px
+ * where a 900 px one gives 836. At full size the scene needs about 720 and gets
+ * clipped — the DOPPELGÄNGER card loses its own title, which is the one thing
+ * on it that must be readable.
+ *
+ * Dropping the pin below this height was the other option and was rejected:
+ * 1366×768, 1280×800 and 1024×768 are three of the six desktop viewports this
+ * page is checked at, and they should get the set piece rather than the
+ * fallback. So the scene gets a compact mode instead: same content, same
+ * crossing, tighter.
+ */
+@media (min-width: 640px) and (max-height: 800px) {
+  /*
+   * Measured: the scene is ~650 px at 1440×900 and the pin is 836, so it fits
+   * with room. At 768 tall the pin is 704 and the margin is thin enough that a
+   * longer hypothesis or a wrapped spec would start clipping. This trims the
+   * padding rather than hiding anything — the beat rail, the spec note and
+   * every label stay, because they are the section's content, not its
+   * decoration.
+   */
+  .bp-atk__frame { gap: 10px; }
+  .bp-atk__scene { gap: 10px; }
+  .bp-atk__card { padding: 12px 14px; gap: 8px; }
+  .bp-atk__half--below .bp-atk__card { min-height: 172px; }
+  .bp-atk__hypothesis { font-size: 14px; }
+  .bp-atk__counters dd { font-size: 13px; }
+  .bp-atk__rule { padding: 8px 0; }
+  .bp-atk__spec { padding: 11px 13px; }
+  .bp-atk__caption { min-height: 1.6em; }
+}
+
+/*
+ * ============================================== responsive · sections 03–09
+ */
+
+@media (max-width: 1023px) {
+  .bp-wx__body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
+
+  .bp-arch__layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+
+  .bp-arch__lines { display: none; }
+  .bp-arch__panel { min-height: 0; }
+
+  .bp-atk__ledger-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  .bp-atk__ledger-list dd { margin-bottom: 12px; }
+}
+
+@media (max-width: 639px) {
+  /* Tabs scroll rather than shrink: three 44 px targets do fit at 390 px. */
+  .bp-wx__tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 4px;
+  }
+
+  .bp-wx__tabs::-webkit-scrollbar { display: none; }
+
+  .bp-wx__tab {
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 9px 13px;
+  }
+
+  .bp-wx__panel {
+    padding: 16px 14px;
+    border-top: 1px solid var(--bp-line);
+    border-radius: 5px;
+  }
+
+  .bp-wx__metric dd { font-size: 16px; }
+
+  .bp-ev__head {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+
+  /* Severity drops to its own line rather than squeezing the claim. */
+  .bp-ev__sev { grid-column: 2; justify-self: start; }
+  .bp-ev__chev { grid-row: 1; grid-column: 3; }
+
+  .bp-ev__meta,
+  .bp-ev__body { padding-left: 12px; }
+
+  .bp-ev__body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .bp-ev__body dd { margin-bottom: 8px; }
+
+  /* Column direction here, so a flex-basis would become a height. Both the
+     card and the spec size to their content instead. */
+  .bp-atk__half--above { flex-direction: column; }
+  .bp-atk__card,
+  .bp-atk__spec { flex: 0 0 auto; }
+  .bp-atk__half--below .bp-atk__card { min-height: 0; }
+  .bp-atk__card { padding: 13px 14px; }
+  .bp-atk__hypothesis { font-size: 14px; }
+  .bp-atk__counters { gap: 16px; }
+  .bp-atk__verdict { font-size: 13px; }
+  .bp-atk__ledger { padding: 16px 15px; }
+
+  .bp-cmp__wrap { overflow-x: visible; }
+  .bp-cmp__table { min-width: 0; font-size: 12px; }
+
+  .bp-appr__card { padding: 16px 15px; }
+  .bp-appr__fp-hash { font-size: 13px; }
+  .bp-appr__buttons { flex-direction: column; }
+  .bp-appr__controls { flex-direction: column; }
+
+  .bp-appr__mutate,
+  .bp-appr__reset { width: 100%; }
+
+  .bp-cv__band { padding: 16px 15px; }
+  .bp-cv__pairs { font-size: 11px; }
+
+  .bp-cv__pairs th,
+  .bp-cv__pairs td { padding-right: 8px; }
+
+  .bp-arch__panel { padding: 16px 15px; }
+
+  .bp-arch__panel-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+    font-size: 13px;
+  }
+
+  .bp-arch__panel-list dd { margin-bottom: 12px; }
+
+  .bp-close__mark { display: none; }
+  .bp-close__ctas { flex-direction: column; }
+  .bp-close__ctas .bp-cta { width: 100%; }
+}
+
+/*
+ * ========================================== reduced motion · sections 03–09
+ *
+ * Nothing here hides content. The components already choose their resting
+ * state — the attack renders its final beat, commit+verify starts resolved —
+ * so all that is left is to stop the transitions that remain.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .bp-wx__panel,
+  .bp-atk__spec,
+  .bp-appr__fp-hash[data-rolled] .bp-appr__fp-glyph,
+  .bp-cmp__table td[data-rejected]::after {
+    animation: none;
+  }
+
+  .bp-wx__tab,
+  .bp-atk__card,
+  .bp-atk__rule,
+  .bp-atk__rail-item,
+  .bp-arch__node,
+  .bp-cv__gates li,
+  .bp-cv__mutation,
+  .bp-cv__pairs th,
+  .bp-cv__pairs td,
+  .bp-cv__status,
+  .bp-appr__card,
+  .bp-appr__btn,
+  .bp-appr__mutate,
+  .bp-appr__reset {
+    transition: none;
+  }
+}

@@ -1,0 +1,1079 @@
+/*
+ * `/how-it-works` — the protocol instrument.
+ *
+ * Three independently sticky columns on desktop, one column with a 56 px sticky
+ * header on a phone. Scoped under `.bp-marketing` like everything else, so
+ * Mission Control never sees any of it.
+ *
+ * The layout's one job: keep the evidence chain on screen while the centre
+ * column moves, so the reader *sees* it accumulate rather than being told that
+ * it does.
+ */
+
+.bp-pr {
+  --bp-pr-gap: 28px;
+  background: var(--bp-void);
+  padding-bottom: 96px;
+}
+
+/* ------------------------------------------------------------------ intro */
+
+.bp-pr__intro {
+  padding: calc(var(--bp-header-h) + 84px) 0 60px;
+  border-bottom: 1px solid var(--bp-line);
+}
+
+.bp-pr__intro-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 var(--bp-gutter);
+}
+
+.bp-pr__title {
+  margin-top: var(--bp-y-2);
+}
+
+.bp-pr__lead {
+  margin-top: var(--bp-y-3);
+  max-width: 62ch;
+}
+
+.bp-pr__intro-ctas {
+  display: flex;
+  gap: 12px;
+  margin-top: var(--bp-y-4);
+  flex-wrap: wrap;
+}
+
+/* --------------------------------------------------- the compact header */
+
+/*
+ * Phone only. It carries stage, name and authority band — the three things a
+ * reader must never lose track of while scrolling one long protocol.
+ */
+.bp-pr__compact {
+  display: none;
+}
+
+/* ----------------------------------------------------------- the layout */
+
+.bp-pr__layout {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 var(--bp-gutter);
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr) 320px;
+  gap: var(--bp-pr-gap);
+  align-items: start;
+}
+
+.bp-pr__rail-col,
+.bp-pr__inspector-col {
+  position: sticky;
+  top: calc(var(--bp-header-h) + 20px);
+  max-height: calc(100dvh - var(--bp-header-h) - 40px);
+  padding: 26px 0;
+}
+
+.bp-pr__rail-col {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.bp-pr__inspector-col {
+  display: flex;
+  min-height: 0;
+}
+
+/*
+ * The chain grows from zero rows to eighteen. If the panel simply grew with it
+ * the authority block would be pushed off the bottom of the pin by stage 06 —
+ * and the authority block is the half of the inspector that answers "who is
+ * allowed to conclude this". So the evidence list is the only part that
+ * scrolls, and the authority statement stays put.
+ */
+.bp-pr__inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.bp-pr__evidence {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.bp-pr__rows {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding-right: 4px;
+}
+
+.bp-pr__authority {
+  flex: none;
+  border-top: 1px solid var(--bp-line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+/* ------------------------------------------------------------- the rail */
+
+.bp-pr__rail-title {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  color: var(--bp-faint);
+  margin-bottom: 12px;
+}
+
+.bp-pr__rail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bp-pr__rail-item {
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  padding: 7px 10px;
+  min-height: 34px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  color: var(--bp-faint);
+  text-align: left;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.bp-pr__rail-item:hover { color: var(--text-secondary); }
+
+.bp-pr__rail-item:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: -2px;
+}
+
+.bp-pr__rail-list li[data-state="done"] .bp-pr__rail-item {
+  color: var(--text-muted);
+  border-left-color: var(--bp-line);
+}
+
+.bp-pr__rail-list li[data-state="on"] .bp-pr__rail-item {
+  color: var(--text);
+  border-left-color: var(--running);
+  background: rgb(88 166 255 / 7%);
+}
+
+.bp-pr__rail-num { font-size: 10px; opacity: 0.75; }
+
+.bp-pr__rail-acts {
+  list-style: none;
+  margin: 2px 0 4px;
+  padding: 0 0 0 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--bp-faint);
+}
+
+.bp-pr__rail-key {
+  margin-top: 30px;
+  padding-top: 18px;
+  border-top: 1px solid var(--bp-line);
+}
+
+.bp-pr__rail-key ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------- the inspector */
+
+.bp-pr__inspector {
+  border: 1px solid var(--bp-line);
+  border-radius: 5px;
+  background: var(--bp-panel);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.bp-pr__inspector-run {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--bp-faint);
+}
+
+.bp-pr__panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--bp-line);
+}
+
+.bp-pr__panel-title {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--bp-faint);
+}
+
+.bp-pr__panel-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-pr__empty {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--bp-faint);
+  padding: 10px 0;
+}
+
+.bp-pr__rows {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.bp-pr__rows li {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  font-family: var(--font-mono);
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--bp-line);
+}
+
+.bp-pr__row-mark { font-size: 10px; color: var(--text-muted); }
+.bp-pr__rows li[data-outcome="FAIL"] .bp-pr__row-mark { color: var(--failure); }
+
+.bp-pr__row-claim {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.bp-pr__row-world { color: var(--text); font-weight: 600; }
+
+.bp-pr__row-outcome {
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  color: var(--text-muted);
+}
+
+.bp-pr__rows li[data-outcome="FAIL"] .bp-pr__row-outcome { color: var(--failure); }
+.bp-pr__rows li[data-outcome="PASS"] .bp-pr__row-outcome { color: var(--success); }
+
+.bp-pr__row-auth {
+  grid-column: 2 / -1;
+  font-size: 9px;
+  color: var(--bp-faint);
+}
+
+.bp-pr__accumulates {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.6;
+  color: var(--bp-faint);
+}
+
+.bp-pr__auth-list {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 5px 10px;
+  margin: 12px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.bp-pr__auth-list dt { color: var(--bp-faint); letter-spacing: 0.09em; }
+.bp-pr__auth-list dd { margin: 0; color: var(--text-secondary); }
+.bp-pr__auth-cannot { color: var(--failure) !important; }
+
+.bp-pr__auth-note {
+  margin-top: 12px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------ the stages */
+
+.bp-pr__viewport {
+  display: flex;
+  flex-direction: column;
+}
+
+.bp-stg {
+  /* Symmetric, and on the shared scale — the stages are a rhythm, and one
+     that ends 8px lower than it starts is just a wobble. */
+  padding: var(--bp-sec-y) 0;
+  border-bottom: 1px solid var(--bp-line);
+  opacity: 0.5;
+  transition: opacity 320ms ease;
+}
+
+/*
+ * The current stage is at full strength and the others recede. This is the only
+ * place the page uses focus-by-dimming, and it is never the sole carrier of
+ * anything: the rail, the inspector and the stage's own heading all say which
+ * stage is current in words.
+ */
+.bp-stg[data-active] { opacity: 1; }
+.bp-stg[data-reduced] { opacity: 1; transition: none; }
+
+.bp-stg__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.bp-stg__num {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--bp-faint);
+}
+
+.bp-stg__name {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--text);
+  margin-right: auto;
+}
+
+.bp-stg__thesis {
+  margin-top: var(--bp-y-3);
+  font-family: var(--font-sans);
+  font-size: clamp(19px, 1.9vw, 26px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  max-width: 26ch;
+}
+
+.bp-stg__viewport-note {
+  margin-top: var(--bp-y-2);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 62ch;
+}
+
+.bp-stg__body {
+  margin-top: var(--bp-y-4);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bp-stg__transition {
+  margin-top: var(--bp-y-4);
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 66ch;
+}
+
+.bp-stg__transition-kind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--bp-faint);
+}
+
+.bp-stg__aside {
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-muted);
+  max-width: 66ch;
+  border-left: 2px solid var(--bp-line);
+  padding-left: 14px;
+}
+
+/* Inline evidence/authority: the phone's inspector. Hidden where the sticky
+   inspector column exists, because it would be the same rows twice. */
+.bp-stg__inline { display: none; }
+
+.bp-stg__next {
+  appearance: none;
+  margin-top: var(--bp-y-4);
+  background: transparent;
+  border: 1px dashed var(--bp-line);
+  border-radius: 4px;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0 16px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.bp-stg__next:hover { color: var(--text); border-color: var(--text-muted); }
+
+.bp-stg__next:focus-visible {
+  outline: 2px solid var(--running);
+  outline-offset: 2px;
+}
+
+.bp-stg__end {
+  display: flex;
+  gap: 12px;
+  margin-top: var(--bp-y-4);
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------- stage pieces */
+
+.bp-pt {
+  border: 1px solid var(--bp-line);
+  border-radius: 4px;
+  background: var(--bp-panel);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bp-pt__label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bp-faint);
+}
+
+.bp-pt__value {
+  font-family: var(--font-mono);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-pt[data-tone="bad"] .bp-pt__value { color: var(--failure); }
+.bp-pt[data-tone="good"] .bp-pt__value { color: var(--success); }
+.bp-pt[data-tone="warn"] .bp-pt__value { color: var(--warning); }
+
+.bp-pt__note {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--bp-faint);
+}
+
+.bp-stg__plates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.bp-stg__reality,
+.bp-stg__twin {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 2px solid var(--failure);
+  padding-left: 14px;
+}
+
+.bp-stg__twin { border-left-color: var(--running); }
+
+.bp-stg__reality-kind,
+.bp-stg__twin-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--bp-faint);
+}
+
+.bp-stg__reality-main,
+.bp-stg__twin-value {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bp-stg__reality-sub {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.bp-stg__objective {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  border: 1px dashed var(--bp-line);
+  border-radius: 4px;
+  padding: 12px 14px;
+}
+
+.bp-stg__objective-kind {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--bp-faint);
+}
+
+.bp-stg__candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bp-stg__candidates li {
+  display: grid;
+  grid-template-columns: 22px 220px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  border: 1px dashed var(--bp-line);
+  border-radius: 4px;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+}
+
+.bp-stg__cand-glyph { font-size: 16px; font-weight: 600; color: var(--text-muted); }
+.bp-stg__cand-kind { font-size: 10px; letter-spacing: 0.12em; color: var(--bp-faint); }
+.bp-stg__cand-body { font-size: 13px; color: var(--text); }
+
+.bp-stg__badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bp-stg__badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.11em;
+  color: var(--text-muted);
+  border: 1px solid var(--bp-line);
+  border-radius: 3px;
+  padding: 4px 8px;
+}
+
+.bp-stg__forks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.bp-stg__fork {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px dashed var(--running);
+  border-radius: 4px;
+  padding: 13px 14px;
+  background: rgb(88 166 255 / 4%);
+  font-family: var(--font-mono);
+}
+
+.bp-stg__fork-glyph { font-size: 18px; font-weight: 600; color: var(--text); }
+.bp-stg__fork-id { font-size: 11px; color: var(--text-secondary); }
+.bp-stg__fork-state { font-size: 10px; letter-spacing: 0.13em; color: var(--running); }
+.bp-stg__fork-ring { font-size: 9.5px; color: var(--bp-faint); }
+
+.bp-stg__outcomes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.bp-stg__outcome {
+  border: 1px solid var(--bp-line);
+  border-radius: 4px;
+  padding: 13px 14px;
+  background: var(--bp-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-family: var(--font-mono);
+}
+
+.bp-stg__outcome[data-missed] { border-color: rgb(210 153 34 / 40%); }
+
+.bp-stg__outcome-head {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bp-stg__outcome-action { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+
+.bp-stg__outcome-metrics {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-stg__outcome-checks { font-size: 10px; color: var(--bp-faint); }
+
+.bp-stg__outcome-note {
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--warning);
+}
+
+/* ------------------------------------------------------------ 05 · attack */
+
+.bp-stg__act {
+  border: 1px solid var(--bp-line);
+  border-radius: 4px;
+  padding: 15px 16px;
+  background: rgb(9 12 18 / 70%);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.bp-stg__act--deterministic {
+  border-color: rgb(88 166 255 / 40%);
+  background: rgb(10 17 27 / 80%);
+}
+
+.bp-stg__act-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bp-stg__act-num {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--bp-faint);
+}
+
+.bp-stg__act-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--text);
+  margin-right: auto;
+}
+
+.bp-stg__quote {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 50ch;
+}
+
+.bp-stg__act-meta,
+.bp-stg__act-note {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--bp-faint);
+}
+
+.bp-stg__rule {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 11px 0;
+  border-top: 1px solid rgb(88 166 255 / 40%);
+  border-bottom: 1px solid rgb(88 166 255 / 40%);
+  background: rgb(88 166 255 / 6%);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--running);
+  text-align: center;
+}
+
+.bp-stg__rule-note {
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: var(--bp-faint);
+}
+
+.bp-stg__fails {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--failure);
+  overflow-wrap: anywhere;
+}
+
+.bp-stg__fails code {
+  color: var(--failure);
+  background: rgb(248 81 73 / 10%);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.bp-stg__verdict {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px dashed var(--bp-line);
+  padding-top: 10px;
+}
+
+.bp-stg__verdict-chip {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--running);
+  border: 1px solid rgb(88 166 255 / 45%);
+  background: rgb(88 166 255 / 10%);
+  border-radius: 3px;
+  padding: 3px 8px;
+}
+
+.bp-stg__verdict-rule {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--bp-faint);
+  overflow-wrap: anywhere;
+}
+
+.bp-stg__verdict-final {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--failure);
+}
+
+/* --------------------------------------------- 06 · compare, 09 · verify */
+
+.bp-stg__matrix,
+.bp-stg__pairs {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.bp-stg__matrix caption,
+.bp-stg__pairs caption {
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--bp-faint);
+  padding-bottom: 10px;
+}
+
+.bp-stg__matrix th,
+.bp-stg__matrix td,
+.bp-stg__pairs th,
+.bp-stg__pairs td {
+  text-align: left;
+  padding: 9px 14px 9px 0;
+  border-bottom: 1px solid var(--bp-line);
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.bp-stg__matrix thead th,
+.bp-stg__pairs thead th {
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bp-faint);
+}
+
+.bp-stg__matrix td[data-rejected],
+.bp-stg__matrix thead th[data-rejected] {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: rgb(248 81 73 / 70%);
+}
+
+.bp-stg__succeeded {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--success);
+}
+
+/* ------------------------------------------ 07 · approve, 08 · commit */
+
+.bp-stg__binding {
+  border: 1px solid rgb(188 140 255 / 34%);
+  border-radius: 4px;
+  padding: 15px 16px;
+  background: rgb(188 140 255 / 4%);
+}
+
+.bp-stg__binding dl {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.bp-stg__binding dt { color: var(--bp-faint); letter-spacing: 0.09em; }
+.bp-stg__binding dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.bp-stg__fp { color: var(--approval) !important; }
+
+.bp-stg__bindings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.bp-stg__bindings span { color: var(--success); margin-right: 8px; }
+
+.bp-stg__gates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  counter-reset: none;
+}
+
+.bp-stg__gates li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 2px 10px;
+  font-family: var(--font-mono);
+  border-left: 2px solid var(--success);
+  padding: 6px 0 6px 12px;
+}
+
+.bp-stg__gate-num { color: var(--success); font-size: 11px; }
+.bp-stg__gate-label { font-size: 12px; color: var(--text-secondary); }
+
+.bp-stg__gate-detail {
+  grid-column: 2;
+  font-size: 10px;
+  color: var(--bp-faint);
+  overflow-wrap: anywhere;
+}
+
+.bp-stg__mutation {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  border: 1px solid rgb(88 166 255 / 45%);
+  border-radius: 4px;
+  padding: 13px 15px;
+  font-family: var(--font-mono);
+}
+
+.bp-stg__mutation-key { font-size: 13px; font-weight: 600; color: var(--text); }
+.bp-stg__mutation-change { font-size: 15px; color: var(--running); }
+
+.bp-stg__mutation-cap {
+  margin-left: auto;
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  color: var(--bp-faint);
+}
+
+/*
+ * ================================================================ responsive
+ */
+
+/* The inspector is the first thing to go: at this width it would be 220 px of
+   10 px monospace, which is a worse way to read the same rows than putting them
+   inline under each stage. */
+@media (max-width: 1199px) {
+  .bp-pr__layout {
+    grid-template-columns: 176px minmax(0, 1fr);
+  }
+
+  .bp-pr__inspector-col { display: none; }
+  .bp-stg__inline { display: block; }
+
+  .bp-stg__inline .bp-pr__evidence,
+  .bp-stg__inline .bp-pr__authority {
+    border: 1px solid var(--bp-line);
+    border-radius: 5px;
+    background: var(--bp-panel);
+    padding: 14px 16px;
+    margin-top: 20px;
+  }
+}
+
+@media (max-width: 899px) {
+  /* The rail goes too. The compact header below carries stage and authority. */
+  .bp-pr__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bp-pr__rail-col { display: none; }
+}
+
+@media (max-width: 639px) {
+  .bp-pr__intro {
+    padding: calc(var(--bp-header-h) + 40px) 0 36px;
+  }
+
+  /*
+   * 56 px, always visible: stage number, stage name, authority band. The reader
+   * is one screen deep in a nine-stage protocol and must never have to scroll
+   * back to find out where they are.
+   */
+  .bp-pr__compact {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 56px;
+    padding: 0 20px;
+    /* Fully opaque, not 94%: at any translucency the stage content scrolling
+       underneath ghosts through the header, which is the one element on the
+       phone that has to stay unambiguously readable. */
+    background: var(--bp-void);
+    border-bottom: 1px solid var(--bp-line);
+    font-family: var(--font-mono);
+  }
+
+  .bp-pr__compact-num {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--bp-faint);
+  }
+
+  .bp-pr__compact-name {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    color: var(--text);
+  }
+
+  .bp-pr__compact-band {
+    margin-left: auto;
+    font-size: 8.5px;
+    letter-spacing: 0.11em;
+    color: var(--text-muted);
+  }
+
+  /* One stage per screenful, plain vertical scroll, nothing pinned. */
+  .bp-stg {
+    padding: 40px 0 44px;
+    opacity: 1;
+  }
+
+  .bp-stg__thesis { font-size: 20px; max-width: none; }
+
+  .bp-stg__candidates li {
+    grid-template-columns: 22px minmax(0, 1fr);
+    row-gap: 4px;
+  }
+
+  .bp-stg__cand-body { grid-column: 2; }
+
+  .bp-stg__matrix,
+  .bp-stg__pairs { font-size: 11px; }
+
+  .bp-stg__matrix th,
+  .bp-stg__matrix td { padding-right: 8px; }
+
+  .bp-stg__binding dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .bp-stg__binding dd { margin-bottom: 8px; }
+
+  .bp-stg__next { width: 100%; }
+  .bp-stg__end { flex-direction: column; }
+  .bp-stg__end .bp-cta { width: 100%; }
+  .bp-pr__intro-ctas { flex-direction: column; }
+  .bp-pr__intro-ctas .bp-cta { width: 100%; }
+}
+
+/*
+ * ============================================================ reduced motion
+ */
+@media (prefers-reduced-motion: reduce) {
+  .bp-stg {
+    opacity: 1;
+    transition: none;
+  }
+
+  .bp-pr__rail-item,
+  .bp-stg__next {
+    transition: none;
+  }
+}

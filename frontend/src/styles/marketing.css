@@ -1,0 +1,711 @@
+/*
+ * Marketing-site styles.
+ *
+ * Everything here is scoped under `.bp-marketing`. Mission Control's shell owns
+ * `html`/`body` scrolling and a 13px base size, and neither may change because a
+ * public website exists — so the landing route brings its own scroll container
+ * and its own type scale, and leaves the globals alone.
+ */
+
+.bp-marketing {
+  /* The shell scrolls itself. `html`/`body` stay `overflow: hidden`, exactly as
+     Mission Control needs them. */
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: clip;
+  overscroll-behavior-y: contain;
+
+  /* The containing block for the header and the skip link.
+     Without this, `.bp-mheader`'s `position: absolute` resolves against the
+     initial containing block — the viewport — which makes it behave like
+     `position: fixed`: a transparent bar pinned at the top of the screen
+     forever, scrolling over every section beneath the hero. That was invisible
+     while the page ended in a blank placeholder and became a collision the
+     moment real content landed under it. The header is meant to sit *in* the
+     hero scene and leave with it. */
+  position: relative;
+
+  background: var(--bp-void);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.65;
+
+  /* Landing-only ground. Darker than the app canvas so the footage, and the
+     monitor inside it, stay the only light in the frame. */
+  --bp-void: #05070a;
+
+  --bp-gutter: clamp(20px, 5vw, 96px);
+  --bp-header-h: 64px;
+}
+
+/* ---------------------------------------------------------------- type scale */
+
+.bp-marketing :where(h1, h2, h3, p) {
+  margin: 0;
+}
+
+.bp-display {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(32px, 3.9vw, 54px);
+  line-height: 1.06;
+  letter-spacing: -0.026em;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.bp-lead {
+  font-family: var(--font-sans);
+  font-size: clamp(14px, 1.15vw, 16.5px);
+  line-height: 1.62;
+  color: var(--text-secondary);
+  max-width: 46ch;
+}
+
+.bp-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------- hero */
+
+.bp-hero {
+  /* The hero's own height. A real length, not just `min-height`, because the
+     stacked layout below sizes the artwork band as a fraction of it and
+     percentages do not resolve against a flex parent's `min-height`. */
+  --bp-hero-h: max(100dvh, 620px);
+  --bp-band: 1;
+
+  position: relative;
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+/* Short viewports get a floor rather than a crushed composition. */
+@media (max-height: 620px) {
+  .bp-hero,
+  .bp-hero__content {
+    min-height: 620px;
+  }
+}
+
+.bp-hero__viewport {
+  position: absolute;
+  inset: auto 0 0;
+  height: calc(var(--bp-band) * var(--bp-hero-h));
+  overflow: hidden;
+  z-index: 0;
+  background: #04060a;
+}
+
+/*
+ * ============================================================== scene space
+ *
+ * The environment is a 1280x720 baked-monitor loop, and the status stack on top
+ * of it has to stay welded to its spot beside the desk while the artwork crops
+ * differently at every viewport. So the scene is a real box holding the media's
+ * exact aspect ratio, sized to *cover* the hero and anchored bottom-right —
+ * which is what `object-fit: cover` with `object-position: 100% 100%` does, but
+ * as a box, so a coordinate inside it still means something.
+ *
+ * `--bp-px` is the whole system: the rendered length of one source pixel. Every
+ * overlay expresses its geometry as `calc(N * var(--bp-px))` with N read off a
+ * frame of the video. `heroScene.ts` holds those numbers; this file holds the
+ * unit. Because the box keeps the source ratio exactly, one `--bp-px` serves
+ * both axes, and the height is derived from the width rather than measured, so
+ * the ratio cannot drift.
+ *
+ * The anchor is deliberate, not a default: the composition puts the workstation
+ * hard right and empty water left, so the right edge must never crop and the
+ * left is the only part cheap to lose. `--bp-shift-*` nudge it where a real
+ * screenshot showed a crop taking something that matters — plain offsets rather
+ * than a transform, because a transform on this box would put every overlay
+ * inside it onto a composited layer and soften the text.
+ */
+.bp-hero__scene {
+  --bp-scene-ar: 1.777778; /* 1280 / 720 */
+  --bp-box-h: calc(var(--bp-band) * var(--bp-hero-h));
+  --bp-scene-w: max(100vw, calc(var(--bp-box-h) * var(--bp-scene-ar)));
+  --bp-scene-h: calc(var(--bp-scene-w) / var(--bp-scene-ar));
+  --bp-px: calc(var(--bp-scene-w) / 1280);
+
+  position: absolute;
+  right: var(--bp-shift-x, 0px);
+  bottom: var(--bp-shift-y, 0px);
+  width: var(--bp-scene-w);
+  height: var(--bp-scene-h);
+}
+
+/* ------------------------------------------------------- the video backdrop */
+
+.bp-hero__backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+/*
+ * The poster and the loop are the same locked composition at the same fit, so
+ * the swap between them moves nothing. The poster is never removed: it is what
+ * paints first, what stays if the video fails, and the entire environment when
+ * reduced motion or Save-Data means no video was requested at all.
+ *
+ * The scene box already holds the source ratio exactly, so `cover` here is a
+ * no-op that only guards against sub-pixel rounding.
+ */
+.bp-hero__poster,
+.bp-hero__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bp-hero__video {
+  /* Transparent until the element is actually presenting frames, so there is
+     never a black rectangle between poster and first frame. The sky is a few
+     seconds further along by then, so this crossfades rather than cuts. */
+  opacity: 0;
+  transition: opacity 520ms ease-out;
+}
+
+.bp-hero__video[data-playing] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-hero__video {
+    transition: none;
+  }
+}
+
+/*
+ * Reading ground for the copy column, and the frame's own falloff into the
+ * page below. The horizontal stop dies out before the lit facility and the
+ * workstation, which carry the frame and must read at full contrast.
+ */
+.bp-hero__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      95deg,
+      rgb(4 6 10 / 88%) 0%,
+      rgb(4 6 10 / 62%) 22%,
+      rgb(4 6 10 / 22%) 40%,
+      rgb(4 6 10 / 0%) 56%
+    ),
+    linear-gradient(to top, rgb(4 6 10 / 72%) 0%, rgb(4 6 10 / 0%) 26%);
+}
+
+/*
+ * ======================================================= crisp text contract
+ *
+ * Everything below draws real text over the footage, and all of it obeys one
+ * rule: **no 3D transforms, anywhere on these elements or their ancestors.**
+ *
+ * `perspective()`, `rotateY()` and `matrix3d()` promote an element to its own
+ * composited layer, which Chrome rasterises once at a fixed scale and then
+ * texture-maps. At the sizes involved here that is exactly how small type goes
+ * soft — it is the same failure mode as baking the text into a 720p video. The
+ * status stack only ever carries `rotate()`, a plain 2D transform re-rasterised
+ * at full device resolution, so it stays sharp on a Retina display.
+ *
+ * Also deliberately absent: `backdrop-filter` (a layer promotion), `will-change`,
+ * and `text-shadow`.
+ */
+
+/* ------------------------------------------------------- the status stack */
+
+/*
+ * Bottom-anchored: the container is the newest card's box, and older cards
+ * translate up out of it. No `overflow` clipping, because the stack is meant to
+ * stand above its own baseline.
+ */
+.bp-hero__messages {
+  position: absolute;
+  /* Just the scene's own slight roll — enough to sit the stack in the world,
+     far too little to cost legibility. */
+  transform: rotate(1.25deg);
+  transform-origin: 0 100%;
+}
+
+.bp-msg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(2 * var(--bp-px));
+  padding: 0 calc(9 * var(--bp-px));
+  border: 1px solid rgb(126 166 212 / 20%);
+  border-top-color: rgb(198 222 248 / 24%);
+  border-radius: calc(1px + 0.2 * var(--bp-px));
+  background: linear-gradient(
+    177deg,
+    rgb(8 13 21 / 86%) 0%,
+    rgb(5 9 15 / 80%) 100%
+  );
+  box-shadow: 0 calc(2 * var(--bp-px)) calc(10 * var(--bp-px)) rgb(0 0 0 / 38%);
+  opacity: 0;
+  transition:
+    transform 500ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bp-msg[data-state="visible"] {
+  opacity: 1;
+}
+
+.bp-msg__head {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--bp-px));
+  font-family: var(--font-mono);
+  font-size: max(8px, calc(8 * var(--bp-px)));
+  line-height: 1.35;
+  letter-spacing: 0.11em;
+  font-weight: 600;
+}
+
+.bp-msg__dot {
+  width: calc(3.5 * var(--bp-px));
+  height: calc(3.5 * var(--bp-px));
+  flex: none;
+}
+
+.bp-msg__status {
+  margin-left: auto;
+  letter-spacing: 0.12em;
+}
+
+.bp-msg__body {
+  font-family: var(--font-mono);
+  font-size: max(7.8px, calc(7.8 * var(--bp-px)));
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------- the phone's single card */
+
+/*
+ * One card, positioned at the seam of the portrait frame: below the copy, above
+ * the workstation. Every beat is mounted in the same spot and only the active
+ * one is opaque, so a change is a crossfade with no layout work.
+ */
+.bp-hero__mobile-card {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 52%;
+  width: min(300px, calc(100vw - 40px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.bp-mcard {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: 9px 12px 10px;
+  border: 1px solid rgb(126 166 212 / 22%);
+  border-top-color: rgb(198 222 248 / 26%);
+  border-radius: 5px;
+  background: linear-gradient(
+    177deg,
+    rgb(8 13 21 / 88%) 0%,
+    rgb(5 9 15 / 82%) 100%
+  );
+  box-shadow: 0 3px 14px rgb(0 0 0 / 40%);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 450ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 450ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bp-mcard[data-state="visible"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* A card that has had its turn leaves upward, so the sequence reads as
+   progress rather than as a slideshow flicking back and forth. */
+.bp-mcard[data-state="past"] {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.bp-mcard__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: 0.11em;
+  font-weight: 600;
+}
+
+.bp-mcard__dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+}
+
+.bp-mcard__status {
+  margin-left: auto;
+  letter-spacing: 0.12em;
+}
+
+.bp-mcard__body {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-msg,
+  .bp-mcard {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------------------------- hero content */
+
+.bp-hero__content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: calc(var(--bp-header-h) + 24px) var(--bp-gutter) 150px;
+  pointer-events: none;
+}
+
+.bp-hero__copy {
+  max-width: 620px;
+  pointer-events: auto;
+}
+
+/*
+ * On the side-by-side composition the column is fluid, not fixed. The scene is
+ * anchored bottom-right, so as the viewport narrows the artwork crops further
+ * from the left and everything anchored in scene space — the status stack above
+ * all — travels left toward this column. A fixed 620px column meets it around
+ * 1280px wide; tying the width to the viewport keeps the gap open. Below 1024
+ * the hero stacks instead, and the column gets the full width back.
+ */
+@media (min-width: 1024px) {
+  .bp-hero__copy {
+    max-width: min(620px, 40vw);
+  }
+}
+
+/* --------------------------------------------------------------------- ctas */
+
+.bp-hero__ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.bp-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.bp-cta--primary {
+  background: var(--running);
+  color: #04070c;
+}
+
+.bp-cta--primary:hover {
+  background: #7cb8ff;
+}
+
+.bp-cta--ghost {
+  border-color: var(--border);
+  color: var(--text);
+  background: rgb(6 10 16 / 45%);
+  backdrop-filter: blur(6px);
+}
+
+.bp-cta--ghost:hover {
+  border-color: var(--text-muted);
+  background: rgb(240 243 246 / 6%);
+}
+
+/* ------------------------------------------------------------------- header */
+
+.bp-mheader {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  height: var(--bp-header-h);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 var(--bp-gutter);
+}
+
+.bp-mheader__link {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 8px 0;
+}
+
+.bp-mheader__link:hover {
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------- skip link */
+
+.bp-skip {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 10;
+}
+
+.bp-skip:focus {
+  left: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* ------------------------------------------------- responsive recomposition */
+
+/*
+ * Below 1024 the side-by-side composition stops being viable: the copy column
+ * and the workstation would have to share a width neither can afford. So the
+ * hero recomposes vertically — copy on top, world beneath — rather than
+ * shrinking the desktop layout.
+ */
+@media (max-width: 1023px) {
+  .bp-hero__content {
+    justify-content: flex-start;
+    padding-top: calc(var(--bp-header-h) + 30px);
+    padding-bottom: 0;
+  }
+
+  .bp-hero__content .bp-lead {
+    max-width: 52ch;
+  }
+
+  /*
+   * The artwork stops being a backdrop and becomes the second half of the page:
+   * a real flow row pushed to the bottom, so it can never be overrun by the
+   * copy above it, which is free to be whatever height it needs.
+   */
+  .bp-hero {
+    display: flex;
+    flex-direction: column;
+    --bp-band: 0.52;
+  }
+
+  /* The artwork markup comes first so it stays the backdrop on desktop; here it
+     has to fall below the copy, hence the explicit order. `margin-top: auto`
+     then pins it to the bottom of a hero taller than its contents. */
+  .bp-hero__viewport {
+    position: relative;
+    inset: auto;
+    order: 2;
+    margin-top: auto;
+    flex: none;
+  }
+
+  .bp-hero__content {
+    order: 1;
+    min-height: 0;
+    padding-bottom: 30px;
+    flex: none;
+  }
+
+  /*
+   * Stop covering; start cropping into the workstation.
+   *
+   * Fitting the whole 1280-wide frame into a band would leave the monitor about
+   * 150px across, with a transcript on it too small to be text. Sizing the box
+   * from the *band height* instead — 420 source pixels is the run from the top
+   * of the workstation to the bottom of the frame — makes the machine as large
+   * as the band can hold while guaranteeing it never crops off the top.
+   */
+  .bp-hero__scene {
+    --bp-scene-w: max(100vw, calc(var(--bp-box-h) * 1280 / 420));
+  }
+}
+
+/*
+ * Where the stack has nowhere to stand.
+ *
+ * The scene is anchored bottom-right, so a viewport *taller* relative to 16:9
+ * crops harder from the left and drags everything in scene space toward the
+ * copy column. That is driven by aspect ratio, not width: 1366x768 (16:9) does
+ * not crop at all and leaves a 130px gap, while 1024x768 (4:3) crops 341px and
+ * puts the stack underneath the copy. Below roughly 1.45 there is no honest
+ * room for it, so it goes and the baked monitor carries the story alone.
+ */
+@media (min-width: 1024px) and (max-aspect-ratio: 29 / 20) {
+  .bp-hero__messages {
+    display: none;
+  }
+}
+
+/*
+ * The same problem from the other side. In the stacked band the box is sized
+ * from the band's height, so a narrow viewport crops even harder: by ~680px the
+ * stack's anchor has travelled off the left edge entirely. The baked monitor is
+ * still comfortably legible there, so it carries the story alone.
+ */
+@media (min-width: 640px) and (max-width: 767px) {
+  .bp-hero__messages {
+    display: none;
+  }
+}
+
+/*
+ * ================================================================== the phone
+ *
+ * A different world, not a cropped one. `branchpoint-mobile-monitor.*` is 9:16
+ * footage composed for this viewport: dark storm across the upper half for the
+ * copy, island and workstation across the lower half. So the hero stops being
+ * "copy above a band of artwork" and becomes what the portrait frame already
+ * is — one continuous environment with the copy laid into its own negative
+ * space, and a single narrative card at the seam between the two halves.
+ *
+ * `Hero` never renders the status stack here, so there is nothing to hide: it
+ * does not exist below this width.
+ */
+@media (max-width: 639px) {
+  /* Back to a full-bleed backdrop — no flex column, no band, and therefore no
+     dead gap between the call to action and the artwork. */
+  .bp-hero {
+    display: block;
+    --bp-band: 1;
+  }
+
+  .bp-hero__viewport {
+    position: absolute;
+    inset: 0;
+    order: 0;
+    margin-top: 0;
+    height: auto;
+  }
+
+  .bp-hero__content {
+    order: 0;
+    justify-content: flex-start;
+    min-height: 100dvh;
+    padding: calc(var(--bp-header-h) + 18px) 20px 40px;
+  }
+
+  /* The portrait media is its own aspect ratio, and nothing on this breakpoint
+     is anchored in scene space, so the box simply fills the hero and lets
+     `object-fit` do the framing. */
+  .bp-hero__scene {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+  }
+
+  .bp-hero__poster,
+  .bp-hero__video {
+    object-position: 50% 50%;
+  }
+
+  /* The portrait frame is dark at the top by design, so the scrim only has to
+     deepen it a little — and it must fade *downward*, not sideways, because
+     that is where this composition puts its copy. */
+  .bp-hero__scrim {
+    background:
+      linear-gradient(
+        to bottom,
+        rgb(4 6 10 / 82%) 0%,
+        rgb(4 6 10 / 52%) 26%,
+        rgb(4 6 10 / 10%) 44%,
+        rgb(4 6 10 / 0%) 58%
+      ),
+      linear-gradient(to top, rgb(4 6 10 / 60%) 0%, rgb(4 6 10 / 0%) 22%);
+  }
+
+  .bp-display {
+    font-size: clamp(29px, 8.4vw, 38px);
+    line-height: 1.08;
+    letter-spacing: -0.028em;
+  }
+
+  /* Forced line breaks stop helping once the column is this narrow. */
+  .bp-display br {
+    display: none;
+  }
+
+  .bp-lead {
+    font-size: 14px;
+    line-height: 1.55;
+    max-width: 34ch;
+  }
+
+  .bp-hero__content .bp-lead {
+    margin-top: 14px;
+  }
+
+  /* Compact and deliberate rather than two full-width slabs. */
+  .bp-hero__ctas {
+    margin-top: 22px;
+    gap: 10px;
+  }
+
+  .bp-cta {
+    flex: 1 1 auto;
+    min-height: 42px;
+    padding: 0 14px;
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+  }
+
+  /* The header's nav and CTA both repeat what the hero already offers, and at
+     this width they wrap and crowd the wordmark. Drop them. */
+  .bp-mheader nav,
+  .bp-mheader > div:last-child {
+    display: none;
+  }
+}

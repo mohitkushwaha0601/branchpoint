@@ -33,13 +33,33 @@ function serveFullRun() {
 }
 
 describe("routing", () => {
-  it("sends the index route to the run list", async () => {
+  it("serves the public landing page at the index route", async () => {
     serveFullRun();
     renderApp("/");
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Runs" }),
+      screen.getByRole("heading", {
+        level: 1,
+        name: /Agents get branches before they get permissions\./,
+      }),
     ).toBeInTheDocument();
+    // Mission Control is one click away, never the thing the index route shows.
+    expect(
+      screen.getAllByRole("link", { name: /SEE LIVE DEMO/ }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("keeps the marketing hero out of Mission Control entirely", async () => {
+    serveFullRun();
+    const { container } = renderApp("/runs");
+
+    await screen.findByRole("heading", { level: 1, name: "Runs" });
+    // The landing route brings a scroll container, a type scale and ~2MB of
+    // hero media with it. None of that may follow the reader into the app.
+    expect(container.querySelector(".bp-marketing")).toBeNull();
+    expect(container.querySelector(".bp-hero")).toBeNull();
+    expect(container.querySelector("video")).toBeNull();
+    expect(container.querySelector('img[src*="/hero/"]')).toBeNull();
   });
 
   it("sends an unknown path to the run list", async () => {
