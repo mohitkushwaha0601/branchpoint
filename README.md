@@ -4,44 +4,69 @@
 
 AI agents shouldn't predict the future. They should rehearse it.
 
+## Contents
+
+| Section | Link |
+|---|---|
+| Team | [Team](#team) |
+| Live Links | [Live Links](#live-links) |
+| The problem | [The problem](#the-problem) |
+| The idea | [The idea](#the-idea) |
+| Evidence > confidence | [Evidence > confidence](#evidence--confidence) |
+| Hero example | [Hero example](#hero-example) |
+| Architecture | [Architecture](#architecture) |
+| TrueForge usage | [TrueForge usage](#trueforge-usage) |
+| Safety model | [Safety model](#safety-model) |
+| Running locally | [Running locally](#running-locally) |
+| Deployed setup | [Deployed setup](#deployed-setup) |
+| Vercel configuration | [Vercel configuration](#vercel-configuration) |
+| Railway configuration | [Railway configuration](#railway-configuration) |
+| Tests | [Tests](#tests) |
+| Code quality | [Code quality](#code-quality) |
+| Limitations | [Limitations](#limitations) |
+| Docs | [Docs](#docs) |
+
+## Team
+
+Team Name: Proof of Chaos (POC)
+
+Members: Yash Mishra, Udit Rawal, Mohit Kushwaha
+
+## Live Links
+
+- Live App: https://branchpoint-three.vercel.app/
+- Repository: https://github.com/mohitkushwaha0601/BranchPoint
+- Commit History: https://github.com/mohitkushwaha0601/BranchPoint/commits/main/
+- Pull Requests: https://github.com/mohitkushwaha0601/BranchPoint/pulls?q=
+- Releases: https://github.com/mohitkushwaha0601/BranchPoint/releases
+- License: https://github.com/mohitkushwaha0601/BranchPoint?tab=MIT-1-ov-file
+- Demo Video: https://www.youtube.com/watch?v=rbIDI6maFDY
+
 ## The problem
 
 Autonomous agents often get one production environment and one chance.
 
-A plausible rollback can restore headline metrics while silently breaking schema
-compatibility, payments, data integrity, or another invariant. The dashboard
-goes green and the damage is somewhere nobody is looking.
+A plausible rollback can restore headline metrics while silently breaking schema compatibility, payments, data integrity, or another invariant. The dashboard goes green and the damage is somewhere nobody is looking.
 
 ## The idea
 
-BRANCHPOINT creates counterfactual branches before granting permission to change
-reality.
+BRANCHPOINT creates counterfactual branches before granting permission to change reality.
 
 ```
-Observe → Plan → Fork → Rehearse → Attack → Replay → Compare
-        → Human Approval → Commit → Verify
+Observe → Plan → Fork → Rehearse → Attack → Replay → Compare → Human Approval → Commit → Verify
 ```
 
-Every candidate action is executed against its own isolated copy of production.
-An adversary attacks each branch. BRANCHPOINT replays whatever the adversary
-proposes and decides for itself. A human approves exactly one bound action, and
-an independent verifier re-reads reality afterwards.
+Every candidate action is executed against its own isolated copy of production. An adversary attacks each branch. BRANCHPOINT replays whatever the adversary proposes and decides for itself. A human approves exactly one bound action, and an independent verifier re-reads reality afterwards.
 
 ## Evidence > confidence
 
-DOPPELGÄNGER — the adversarial agent — investigates a world with read-only tools
-and a Daytona sandbox it may run code in. It can delegate to a subagent. Every
-one of those findings is recorded `machine_verifiable=False`.
+DOPPELGÄNGER — the adversarial agent — investigates a world with read-only tools and a Daytona sandbox it may run code in. It can delegate to a subagent. Every one of those findings is recorded `machine_verifiable=False`.
 
-A failure matters only after BRANCHPOINT's own deterministic replay reproduces
-it against that world's snapshot. Only that replay produces
-`machine_verifiable=True` evidence, and only such evidence can veto.
+A failure matters only after BRANCHPOINT's own deterministic replay reproduces it against that world's snapshot. Only that replay produces `machine_verifiable=True` evidence, and only such evidence can veto.
 
-> **DOPPELGÄNGER is allowed to be creative. It is not allowed to be
-> authoritative.**
+> **DOPPELGÄNGER is allowed to be creative. It is not allowed to be authoritative.**
 
-A counterexample claiming `REPRODUCED` without qualifying evidence behind it
-serializes as `reproduced: true, authoritative: false` and vetoes nothing.
+A counterexample claiming `REPRODUCED` without qualifying evidence behind it serializes as `reproduced: true, authoritative: false` and vetoes nothing.
 
 ## Hero example
 
@@ -53,13 +78,9 @@ Checkout is at **41.3% error, 4.8s p95** after pricing-service v2.41.
 | **β** | disable `PRICING_V2` | recovers, no invariant break | **RECOMMENDED** |
 | **γ** | scale replicas | partial improvement, higher cost | SURVIVED, ranked lower |
 
-α looks best on the dashboard. DOPPELGÄNGER suspects the older runtime cannot
-read orders written under schema 41; BRANCHPOINT replays that hypothesis,
-reproduces `schema_compatibility` and `payment_retry` failures, and vetoes it.
+α looks best on the dashboard. DOPPELGÄNGER suspects the older runtime cannot read orders written under schema 41; BRANCHPOINT replays that hypothesis, reproduces `schema_compatibility` and `payment_retry` failures, and vetoes it.
 
-β is recommended by the deterministic comparator — not by a model score. A human
-then approves it, BRANCHPOINT commits exactly that bound action, and an
-independent verifier confirms reality changed.
+β is recommended by the deterministic comparator — not by a model score. A human then approves it, BRANCHPOINT commits exactly that bound action, and an independent verifier confirms reality changed.
 
 ## Architecture
 
@@ -101,8 +122,7 @@ flowchart TD
     end
 ```
 
-Everything above the `CounterexampleSpec` boundary is a hypothesis. Everything
-below it is something BRANCHPOINT checked itself.
+Everything above the `CounterexampleSpec` boundary is a hypothesis. Everything below it is something BRANCHPOINT checked itself.
 
 ## TrueForge usage
 
@@ -127,8 +147,7 @@ below it is something BRANCHPOINT checked itself.
 | **Commit operator** | one destructive tool, sandbox **off**, approval-gated | executes a bound action |
 | **Verifier** | re-reads reality independently after commit | **authoritative** |
 
-A commit additionally requires an exact action fingerprint match and a one-time
-capability that is consumed atomically.
+A commit additionally requires an exact action fingerprint match and a one-time capability that is consumed atomically.
 
 ## Running locally
 
@@ -146,11 +165,9 @@ export BRANCHPOINT_MODEL="<provider>/<model-id>"
 cd frontend && npm install && npm run dev
 ```
 
-Open `http://localhost:5173/runs` and press **Run BRANCHPOINT**.
-`/demo/hero` renders an offline fixture with no backend.
+Open `http://localhost:5173/runs` and press **Run BRANCHPOINT**. `/demo/hero` renders an offline fixture with no backend.
 
-No model, TrueForge, or Daytona credential ever reaches the browser. The model
-provider's key lives in TrueForge; BRANCHPOINT holds none.
+No model, TrueForge, or Daytona credential ever reaches the browser. The model provider's key lives in TrueForge; BRANCHPOINT holds none.
 
 ## Deployed setup
 
