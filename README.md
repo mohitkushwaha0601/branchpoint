@@ -12,6 +12,7 @@ AI agents shouldn't predict the future. They should rehearse it.
 | Live Links | [Live Links](#live-links) |
 | The problem | [The problem](#the-problem) |
 | The idea | [The idea](#the-idea) |
+| Screenshots | [Screenshots](#screenshots) |
 | Evidence > confidence | [Evidence > confidence](#evidence--confidence) |
 | Hero example | [Hero example](#hero-example) |
 | Architecture | [Architecture](#architecture) |
@@ -57,6 +58,82 @@ Observe → Plan → Fork → Rehearse → Attack → Replay → Compare → Hum
 ```
 
 Every candidate action is executed against its own isolated copy of production. An adversary attacks each branch. BRANCHPOINT replays whatever the adversary proposes and decides for itself. A human approves exactly one bound action, and an independent verifier re-reads reality afterwards.
+
+## Screenshots
+
+### Landing page
+
+![BRANCHPOINT landing page showing the counterfactual operations interface](images/home-page.png)
+
+*BRANCHPOINT gives agents isolated branches to rehearse consequential actions before they receive permission.*
+
+### 1. The trap
+
+![Problem context showing why a fast rollback can still be unsafe](images/problem-context.png)
+
+*A rollback restores headline metrics while deterministic evidence reveals schema compatibility and payment retry failures.*
+
+### 2. Many worlds
+
+![Reality view showing the production twin before candidate actions are forked](images/step1-reality.png)
+
+*The workflow begins with a measured production twin of pricing-service v2.41.*
+
+![Fork view showing three candidate actions in isolated worlds](images/step2-fork.png)
+
+*Rollback, feature-flag disablement, and scaling become three separate worlds.*
+
+![Execution view showing all three actions running against sealed snapshots](images/step3-execution.png)
+
+*Each candidate executes against its own sealed snapshot and cannot reach production.*
+
+![Outcome view comparing measured results from the three candidate worlds](images/step4-outcomes.png)
+
+*Measured outcomes make the rollback look fastest before invariant checks are considered.*
+
+![Verdict view showing the rollback vetoed and the feature flag action recommended](images/step5-verdicts.png)
+
+*Evidence vetoes the unsafe rollback; disabling `PRICING_V2` survives and is recommended.*
+
+### 3. World explorer
+
+![World explorer showing evidence and disqualifying failures for the rollback world](images/Explorer.png)
+
+*The world explorer traces each verdict to machine-verifiable evidence.*
+
+### 4. Adversarial attack and replay
+
+![Doppelganger proposing an exploratory compatibility hypothesis](images/Doppelganger.png)
+
+*DOPPELGÄNGER can propose creative counterexamples, but its findings have no authority by themselves.*
+
+![Hypothesis handoff and deterministic replay reproducing critical failures](images/Hyposthesis-handoff-replay.png)
+
+*A typed `CounterexampleSpec` crosses the authority boundary; BRANCHPOINT replays it deterministically before issuing a veto.*
+
+### 5. Deterministic comparison
+
+![Deterministic comparison table ranking surviving candidate worlds without confidence scores](images/Deterministic-comparison.png)
+
+*The comparator removes vetoed worlds and ranks survivors using explicit fields, not model confidence.*
+
+### 6. Human checkpoint
+
+![Human approval card bound to an exact action fingerprint](images/human-checkpoint.png)
+
+*The recommendation is bound to one exact action and fingerprint before a human can grant permission.*
+
+### 7. Commit and verify
+
+![Commit and verification panels showing capability checks and independent verification](images/commit-verify.png)
+
+*A one-time capability authorizes the bound action, then an independent verifier re-reads production.*
+
+### 8. Authority architecture
+
+![Authority architecture showing exploratory deterministic and human permission boundaries](images/Authority-architecture.png)
+
+*The authority map makes clear which components may explore, prove, grant permission, commit, and verify.*
 
 ## Evidence > confidence
 
